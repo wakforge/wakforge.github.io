@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildIndex, computeList, costIndex, searchItems, mainRecipe, missingPlans, encodeShare, decodeShare } from '../web/js/craftcore.js';
+import { buildIndex, computeList, costIndex, searchItems, mainRecipe, missingPlans, encodeShare, decodeShare, parseOwned } from '../web/js/craftcore.js';
 
 // Mini jeu de données : A = 2 B + 1 C (produit 1) ; B = 3 C (produit 2) ; C et D sont des ressources.
 const item = (id, nom, recettes) => ({ id, nom, nom_en: '', niveau: 1, rarete: 0, type: 'Test', ...(recettes ? { recettes } : {}) });
@@ -119,4 +119,14 @@ test('données réelles : objets PvP repérés', () => {
   assert.ok(pvp.length > 250, `${pvp.length} objets PvP`);
   assert.ok(pvp.some(o => o.nom === 'La Bienveillante'));
   assert.ok(!items.find(o => o.id === 2021).pvp); // Amulette du Bouftou
+});
+
+test('bandeau « Possédés » de l\'infobulle : sur moi, équipé, coffre, pacte', () => {
+  const ok = { moi: 458, equipe: 0, coffre: 117, pacte: 0, total: 575 };
+  assert.deepEqual(parseOwned(['Possédés : 458 0 117 0', 'Commun', 'Croquette Maléfique']), ok);
+  assert.deepEqual(parseOwned(['Possédés : 458 @ 0 Ö 117 B 0 €', 'Commun']), ok, 'icônes lues comme des signes');
+  assert.deepEqual(parseOwned(['Possedes : 458', '0', '117 0', 'Commun']), ok, 'rangée coupée en plusieurs lignes');
+  assert.deepEqual(parseOwned(['Possédés : 1 234 0 117 O']), { moi: 1234, equipe: 0, coffre: 117, pacte: 0, total: 1351 });
+  assert.equal(parseOwned(['Commun', 'Croquette Maléfique']), null);
+  assert.equal(parseOwned(['Possédés : 458 0 117']), null, 'incomplet : on ne devine pas');
 });

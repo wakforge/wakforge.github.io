@@ -2,7 +2,7 @@
 import { norm, escapeHtml, scanKey, lev } from './util.js';
 import { t, tn, isEn, locale, jobName, rarityLabel, monsterTypeName, trapActionName } from './i18n.js';
 import { parseRecapWords, matchBuild } from './buildimport.js';
-import { buildIndex, computeList, costIndex, searchItems, sourcesOf, mainRecipe, missingPlans, monsterItemIds, encodeShare, decodeShare, RARITY_CLASS } from './craftcore.js';
+import { buildIndex, computeList, costIndex, searchItems, sourcesOf, mainRecipe, missingPlans, monsterItemIds, encodeShare, decodeShare, parseOwned, RARITY_CLASS } from './craftcore.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const fmtN = n => Number(n).toLocaleString(locale);
@@ -1233,6 +1233,8 @@ function scanChoice(versions, lines, comp, mode = '') {
     state: 'choose',
     mode,
     sel,
+    // Ctrl+F : le bandeau « Possédés » de l'infobulle donne la quantité déjà en jeu, par emplacement
+    owned: mode === 'have' ? parseOwned(lines) : null,
     versions: versions.map((o, i) => {
       const r = mainRecipe(o);
       const k = comp.get(o.id);
@@ -1261,6 +1263,14 @@ window.wfScanHave = (id, qte) => {
   if (!o) return;
   const c = ctx.getCraft();
   c.stock[id] = Math.min(999999, (c.stock[id] || 0) + Math.max(1, Math.floor(qte) || 1));
+  ctx.saveCraft();
+  renderCraft();
+};
+// « J'en ai » d'après le bandeau « Possédés » : la quantité remplace celle de « J'ai »
+window.wfScanSetHave = (id, qte) => {
+  if (!IDX?.byId.get(id)) return;
+  const c = ctx.getCraft();
+  c.stock[id] = Math.min(999999, Math.max(0, Math.floor(qte) || 0));
   ctx.saveCraft();
   renderCraft();
 };
@@ -1298,6 +1308,12 @@ export async function handleScan(r) {
     }
     if (win) { ctx.native.scanShow(scanChoice(usable, r.lines, comp, 'have')); return; }
     const k = comp.get(usable[0].id);
+    const owned = parseOwned(r.lines);
+    if (owned) {
+      window.wfScanSetHave(usable[0].id, owned.total);
+      tell(t('<b>{nom}</b> : « J\'ai » mis à {n} (bandeau « Possédés » du jeu).', { nom: escapeHtml(usable[0].nom), n: owned.total.toLocaleString(locale) }), 'ok', t('{nom} : « J\'ai » mis à {n}.', { nom: usable[0].nom, n: owned.total.toLocaleString(locale) }));
+      return;
+    }
     window.wfScanHave(usable[0].id, Math.max(1, k.need - k.have));
     tell(t('<b>{nom}</b> ajouté à « J\'ai ».', { nom: escapeHtml(usable[0].nom) }), 'ok', t('{nom} ajouté à « J\'ai ».', { nom: usable[0].nom }));
     return;

@@ -11,7 +11,12 @@ const root = $('#scanPop');
 const call = (name, ...a) => window[name]?.(...a)?.catch?.(() => {});
 const closeWin = () => { pop = null; call('nativeScanClose'); };
 
-let pop = null; // { state, versions, sel, qte, … }
+let pop = null; // { state, versions, sel, qte, owned, use, … }
+
+// emplacements du bandeau « Possédés » de l'infobulle, dans l'ordre du jeu
+const PLACES = [['moi', 'Sur moi'], ['equipe', 'Équipé'], ['coffre', 'Coffre'], ['pacte', 'Pacte']];
+const ownedSum = () => PLACES.reduce((a, [k]) => a + (pop.use.has(k) ? pop.owned[k] : 0), 0);
+const minQte = () => (pop?.owned ? 0 : 1);
 
 function render() {
   if (!pop) { root.innerHTML = ''; return; }
@@ -39,12 +44,16 @@ function render() {
     <div class="sp-rar" role="radiogroup" aria-label="${t('Rareté')}">${pop.versions.map((v, i) => `<button type="button" role="radio" aria-checked="${i === pop.sel}" data-sp-rar="${i}"><span class="rar-dot ${escapeHtml(v.cls)}"></span>${escapeHtml(v.label)}</button>`).join('')}</div>
     <div class="sp-label">${t('Quantité')}</div>
     <div class="sp-qty"><div class="stepper"><button type="button" data-sp-step="-1" aria-label="${t('Moins')}">−</button>
-      <input type="number" min="1" max="9999" value="${pop.qte}" data-sp-qte aria-label="${t('Quantité')}">
+      <input type="number" min="${minQte()}" max="9999" value="${pop.qte}" data-sp-qte aria-label="${t('Quantité')}">
       <button type="button" data-sp-step="1" aria-label="${t('Plus')}">+</button></div>
       ${pop.mode === 'have' && o.comp ? `<span class="muted">${t('besoin {a} · j\'ai {b}', { a: fmtN(o.comp.need), b: fmtN(o.comp.have) })}</span>`
         : o.inList ? `<span class="muted">${t('déjà {n} dans la liste', { n: fmtN(o.inList) })}</span>` : ''}</div>
+    ${pop.owned ? `<div class="sp-label">${t('Possédés en jeu')}</div>
+    <div class="sp-own">${PLACES.filter(([k]) => pop.owned[k] > 0).map(([k, l]) => `<button type="button" aria-pressed="${pop.use.has(k)}" data-sp-own="${k}" title="${t('Compter ou non cet emplacement')}">${t(l)} <b>${fmtN(pop.owned[k])}</b></button>`).join('') || `<span class="muted">${t('aucun')}</span>`}</div>` : ''}
     <footer class="sp-foot"><button class="btn small ghost" type="button" data-sp-close>${t('Annuler')}</button>
-      ${pop.mode === 'have'
+      ${pop.mode === 'have' && pop.owned
+        ? `<button class="btn small primary" type="button" data-sp-have title="${t('Remplacer la quantité de « J\'ai » par celle-ci')}">${t('Mettre à jour « J\'ai »')}</button>`
+        : pop.mode === 'have'
         ? `<button class="btn small primary" type="button" data-sp-have title="${t('Ajouter cette quantité à « J\'ai » dans la liste')}">${t('Ajouter à « J\'ai »')}</button>`
         : `<button class="btn small primary" type="button" data-sp-ok>${t('Ajouter à la liste')}</button>`}</footer>
   </div>`;
@@ -55,11 +64,12 @@ function render() {
 
 function readQte() {
   const v = Math.floor(+root.querySelector('[data-sp-qte]')?.value);
-  return Math.min(9999, Math.max(1, v || 1));
+  return Math.min(9999, Math.max(minQte(), Number.isFinite(v) ? v : 1));
 }
 
-/** Quantité proposée : ce qui manque pour une ressource de la liste, sinon 1. */
-const defaultQte = o => (pop?.mode === 'have' && o.comp?.missing > 0 ? Math.min(9999, o.comp.missing) : 1);
+/** Quantité proposée : ce que le bandeau « Possédés » compte, sinon ce qui manque pour une ressource de la liste, sinon 1. */
+const defaultQte = o => (pop?.owned ? Math.min(9999, ownedSum())
+  : pop?.mode === 'have' && o.comp?.missing > 0 ? Math.min(9999, o.comp.missing) : 1);
 
 // Ctrl+F (mode « have ») : la quantité va dans « J'ai » ; Ctrl+D : dans les objets à fabriquer
 function confirm(have = pop?.mode === 'have') {
@@ -67,6 +77,13 @@ function confirm(have = pop?.mode === 'have') {
   const o = pop.versions[pop.sel];
   if (have ? !o.comp : !o.craftable) return;
   const qte = readQte();
+  if (have && pop.owned) {
+    call('nativeScanSetHave', o.id, qte);
+    pop = { state: 'done', html: t('« J\'ai » : <b>{n} {nom}</b>', { n: fmtN(qte), nom: escapeHtml(o.nom) }) };
+    render();
+    setTimeout(() => { if (pop?.state === 'done') closeWin(); }, 600);
+    return;
+  }
   call(have ? 'nativeScanHave' : 'nativeScanAdd', o.id, qte);
   pop = { state: 'done', html: have ? t('<b>+{n} {nom}</b> dans « j\'ai ».', { n: fmtN(qte), nom: escapeHtml(o.nom) }) : t('<b>{n} × {nom}</b> ajouté à la liste.', { n: fmtN(qte), nom: escapeHtml(o.nom) }) };
   render();
@@ -86,6 +103,7 @@ function selectVersion(i) {
 /** Appelé par l'appli PC : nouvel état à afficher. */
 window.wfPop = state => {
   pop = { sel: 0, ...state };
+  if (pop.owned) pop.use = new Set(PLACES.map(([k]) => k));
   if (pop.state === 'choose') pop.qte = defaultQte(pop.versions[pop.sel]);
   render();
 };
@@ -98,9 +116,16 @@ root.addEventListener('click', e => {
   if (b.matches('[data-sp-have]')) { confirm(true); return; }
   if (b.matches('[data-sp-item]')) { const id = pop.itemId; pop = null; render(); call('nativeScanItem', id); return; }
   if (b.matches('[data-sp-rar]')) { selectVersion(+b.dataset.spRar); return; }
+  if (b.matches('[data-sp-own]')) {
+    const k = b.dataset.spOwn;
+    if (!pop.use.delete(k)) pop.use.add(k);
+    pop.qte = Math.min(9999, ownedSum());
+    render();
+    return;
+  }
   if (b.matches('[data-sp-step]')) {
     const input = root.querySelector('[data-sp-qte]');
-    input.value = Math.min(9999, Math.max(1, readQte() + +b.dataset.spStep * (e.shiftKey ? 10 : 1)));
+    input.value = Math.min(9999, Math.max(minQte(), readQte() + +b.dataset.spStep * (e.shiftKey ? 10 : 1)));
     pop.qte = +input.value;
   }
 });

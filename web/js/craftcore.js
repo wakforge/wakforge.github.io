@@ -252,3 +252,35 @@ export function decodeShare(text) {
     return cibles.length ? { nom: typeof data.n === 'string' ? data.n : '', cibles } : null;
   } catch { return null; }
 }
+
+/* Bandeau « Possédés : 458 🎒 0 🛡 117 🧰 0 🐉 » en haut de l'infobulle du jeu, lu par l'OCR :
+ * quantités sur soi, équipées, au coffre et au pacte, dans cet ordre (les icônes ne sont pas lues).
+ * Renvoie { moi, equipe, coffre, pacte, total } ou null si le bandeau est absent ou illisible. */
+export const OWNED_PLACES = ['moi', 'equipe', 'coffre', 'pacte'];
+export function parseOwned(lines) {
+  const L = (lines || []).map(l => String(l).normalize('NFD').replace(/[̀-ͯ]/g, ''));
+  const i = L.findIndex(l => /\bpossed|\bowned\b/i.test(l));
+  if (i < 0) return null;
+  let text = L[i].replace(/^.*?(possed\w*|owned)\s*:?/i, '');
+  // l'OCR coupe parfois la rangée en plusieurs lignes : on prend la suite tant qu'elle n'a pas de mot
+  for (let j = i + 1; j < Math.min(L.length, i + 4) && !/[a-z]{3}/i.test(L[j]); j++) text += ' ' + L[j];
+  const read = loose => {
+    const nums = [];
+    for (let w of text.split(/\s+/)) {
+      if (loose && /^[Oo]$/.test(w)) w = '0';
+      const m = w.match(/^[^\d\w]?(\d+)[^\d]{0,2}$/);
+      if (m) nums.push(m[1]);
+    }
+    // séparateur de milliers (« 1 234 ») : on recolle tant qu'il y a trop de nombres
+    for (let k = 0; nums.length > 4 && k < nums.length - 1;) {
+      if (nums[k].length <= 3 && nums[k + 1].length === 3 && nums[k] !== '0') nums.splice(k, 2, nums[k] + nums[k + 1]);
+      else k++;
+    }
+    return nums.length === 4 ? nums.map(Number) : null;
+  };
+  const n = read(true) || read(false);
+  if (!n) return null;
+  const out = Object.fromEntries(OWNED_PLACES.map((p, k) => [p, n[k]]));
+  out.total = n.reduce((a, b) => a + b, 0);
+  return out;
+}

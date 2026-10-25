@@ -107,6 +107,9 @@ func newScanWindow(main webview2.WebView, mainWnd uintptr) *scanWindow {
 	_ = view.Bind("nativeScanHave", func(id, qte int) {
 		main.Dispatch(func() { main.Eval(fmt.Sprintf("window.wfScanHave && window.wfScanHave(%d, %d)", id, qte)) })
 	})
+	_ = view.Bind("nativeScanSetHave", func(id, qte int) {
+		main.Dispatch(func() { main.Eval(fmt.Sprintf("window.wfScanSetHave && window.wfScanSetHave(%d, %d)", id, qte)) })
+	})
 	_ = view.Bind("nativeScanClose", func() {
 		main.Dispatch(func() { s.close(true) })
 	})
@@ -146,7 +149,7 @@ func scanWndProc(hwnd, msg, wp, lp uintptr) uintptr {
 
 // popupRect place la fenêtre à côté du curseur, dans la zone de travail de son écran.
 func popupRect(pt point) rect {
-	w, h, gap := int32(dpiScale(400)), int32(dpiScale(370)), int32(dpiScale(28))
+	w, h, gap := int32(dpiScale(400)), int32(dpiScale(420)), int32(dpiScale(28))
 	wa := rect{0, 0, int32(dpiScale(1280)), int32(dpiScale(720))}
 	mon, _, _ := procMonitorFromPoint.Call(uintptr(uint32(pt.X))|uintptr(uint32(pt.Y))<<32, monitorDefaultToNear)
 	if mon != 0 {
