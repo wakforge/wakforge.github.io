@@ -8,6 +8,27 @@ export function norm(s) {
     .toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+/** Clé de comparaison tolérante aux erreurs d'OCR : sans accents, apostrophes ni ponctuation. */
+export const scanKey = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  .replace(/['’`´]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** Distance d'édition entre a et b, arrêtée dès qu'elle dépasse max (renvoie alors max + 1). */
+export function lev(a, b, max) {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    let best = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (cur[j] < best) best = cur[j];
+    }
+    if (best > max) return max + 1;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
 /** Identifiant stable à partir d'un nom ("Gengas Kin" -> "gengas-kin"). */
 export function slug(s) {
   return norm(s).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'archimonstre';
