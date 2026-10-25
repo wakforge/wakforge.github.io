@@ -1,6 +1,7 @@
 // Onglets « Craft » (liste de courses) et « Bestiaire » + fiche objet.
-import { norm, escapeHtml } from './util.js';
+import { norm, escapeHtml, scanKey, lev } from './util.js';
 import { t, tn, isEn, locale, jobName, rarityLabel, monsterTypeName, trapActionName } from './i18n.js';
+import { parseRecapWords, matchBuild } from './buildimport.js';
 import { buildIndex, computeList, costIndex, searchItems, sourcesOf, mainRecipe, missingPlans, monsterItemIds, encodeShare, decodeShare, RARITY_CLASS } from './craftcore.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -734,6 +735,195 @@ export async function openItem(id) {
   dlg.scrollTop = 0;
 }
 
+/* ------------------------------------------------------------ import d'un build (image du récap Wakfuli)
+ * Le texte de l'image est lu dans le navigateur avec Tesseract.js, chargé à la première utilisation
+ * (quelques Mo avec le français) ; buildimport.js retrouve ensuite les équipements. Rien n'est envoyé. */
+
+const TESSERACT_JS = 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js';
+let ocrWorker = null;
+let ocrProgress = null;
+let build = null; // { state: pick | read | list, err, msg, title, rows: [{ versions, sel, on }], unknown, newList }
+
+function loadTesseract() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = TESSERACT_JS;
+    s.onload = () => resolve(window.Tesseract);
+    s.onerror = () => { s.remove(); reject(new Error(t('module de lecture indisponible, vérifie ta connexion'))); };
+    document.head.append(s);
+  });
+}
+
+/** Mots lus dans l'image, avec leur position. */
+async function readImage(file) {
+  const T = await loadTesseract();
+  if (!ocrWorker) {
+    ocrWorker = T.createWorker('fra', 1, { logger: m => ocrProgress?.(m) })
+      .then(async w => { await w.setParameters({ tessedit_pageseg_mode: '11' }); return w; }) // texte épars : colonnes du récap
+      .catch(e => { ocrWorker = null; throw e; });
+  }
+  const w = await ocrWorker;
+  // petite image : agrandie, l'OCR lit mal les petits caractères
+  const bmp = await createImageBitmap(file);
+  const k = bmp.width < 1000 ? 2 : 1;
+  const cv = document.createElement('canvas');
+  cv.width = bmp.width * k; cv.height = bmp.height * k;
+  cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+  bmp.close?.();
+  const { data } = await w.recognize(cv, {}, { blocks: true });
+  return (data.blocks || []).flatMap(b => b.paragraphs.flatMap(p => p.lines.flatMap(l => l.words)));
+}
+
+export async function openBuildImport() {
+  await loadGamedata();
+  build = { state: 'pick' };
+  renderBuild();
+  const dlg = $('#buildDlg');
+  if (!dlg.open) dlg.showModal();
+}
+
+async function importBuildImage(file) {
+  if (!file || !/^image\//.test(file.type)) { build = { state: 'pick', err: t('Ce fichier n\'est pas une image.') }; renderBuild(); return; }
+  build = { state: 'read', msg: t('Chargement du module de lecture…') };
+  renderBuild();
+  ocrProgress = m => {
+    if (build?.state !== 'read') return;
+    const pct = m.progress ? ` ${Math.round(m.progress * 100)} %` : '';
+    const msg = m.status === 'recognizing text' ? t('Lecture de l\'image…') + pct : t('Chargement du module de lecture…') + pct;
+    const el = $('#buildBody [data-b-msg]');
+    if (el) el.textContent = msg;
+  };
+  try {
+    const { title, items } = parseRecapWords(await readImage(file));
+    const { found, unknown } = matchBuild(IDX, items);
+    if (!found.length) {
+      build = { state: 'pick', err: t('Aucun équipement trouvé dans cette image. Utilise l\'export en image de l\'onglet « Récap » de Wakfuli (ou une capture de cet onglet) : chaque objet doit y apparaître avec son nom et son niveau.') };
+    } else {
+      const L = ctx.lists;
+      build = {
+        state: 'list', title, unknown,
+        rows: found.map(f => ({ versions: f.versions, sel: f.versions.indexOf(f.pick), on: !!mainRecipe(f.pick) })),
+        newList: ctx.getCraft().cibles.length > 0 && L.all().length < L.max,
+      };
+    }
+  } catch (e) {
+    build = { state: 'pick', err: t('Lecture impossible : {err}', { err: escapeHtml(e?.message || String(e)) }) };
+  }
+  renderBuild();
+}
+
+function renderBuild() {
+  const body = $('#buildBody');
+  if (!build) { body.innerHTML = ''; return; }
+  const head = `<h2>${t('Importer un build')}</h2>`;
+  if (build.state === 'read') {
+    body.innerHTML = `${head}<div class="build-wait"><span class="sp-spin"></span><span data-b-msg>${escapeHtml(build.msg)}</span></div>
+      <p class="hint-line">${t('La première fois, le module de lecture de texte se télécharge (quelques Mo). L\'image reste sur ton appareil.')}</p>`;
+    return;
+  }
+  if (build.state === 'pick') {
+    body.innerHTML = `${head}
+      <p>${t('Sur <a href="https://wakfuli.com/builder" target="_blank" rel="noopener">Wakfuli</a>, ouvre ton build, onglet <b>Récap</b>, puis exporte-le en image. Wak\'Forge y lit le nom et le niveau de chaque équipement.')}</p>
+      <label class="build-drop" data-b-drop tabindex="0">
+        <b>${t('Dépose l\'image ici')}</b>
+        <span>${t('ou clique pour la choisir, ou colle-la avec Ctrl+V')}</span>
+        <input type="file" accept="image/*" data-b-file hidden>
+      </label>
+      ${build.err ? `<p class="error">${build.err}</p>` : ''}
+      <div class="dlg-actions"><button class="btn" type="button" data-close>${t('Fermer')}</button></div>`;
+    return;
+  }
+  const L = ctx.lists;
+  const n = build.rows.filter(r => r.on).length;
+  const listName = build.title || t('Build importé');
+  body.innerHTML = `${head}
+    <p>${tn(build.rows.length, '{n} équipement trouvé. Décoche ce que tu as déjà, et vérifie la rareté.', '{n} équipements trouvés. Décoche ce que tu as déjà, et vérifie la rareté.')}</p>
+    <ul class="build-list">${build.rows.map((r, i) => {
+      const o = r.versions[r.sel];
+      const rec = mainRecipe(o);
+      const meta = [escapeHtml(o.type), t('Niv. {n}', { n: o.niveau }),
+        rec ? `${jobIcon(rec.metier, '')} ${escapeHtml(jobName(rec.metier))} ${rec.niveau}` : `<span class="muted">${t('ne se fabrique pas')}</span>`].join(' · ');
+      const ver = r.versions.length > 1
+        ? `<select class="select small" data-b-ver aria-label="${t('Rareté')}">${r.versions.map((v, j) => `<option value="${j}"${j === r.sel ? ' selected' : ''}>${escapeHtml(rarityName(v.rarete) || rarityLabel('Commun'))} · ${t('Niv. {n}', { n: v.niveau })}${v.recettes?.length ? '' : ` (${t('ne se fabrique pas')})`}</option>`).join('')}</select>`
+        : `<span class="chip">${escapeHtml(rarityName(o.rarete) || rarityLabel('Commun'))}</span>`;
+      return `<li class="${rec ? '' : 'off'}" data-b="${i}">
+        <input type="checkbox" data-b-on${r.on ? ' checked' : ''}${rec ? '' : ' disabled'} aria-label="${t('Ajouter à la liste')}">
+        <div class="b-main"><div class="b-name">${itemLabel(o)}${pvpTag(o)}</div><div class="s-meta">${meta}</div></div>
+        ${ver}
+      </li>`;
+    }).join('')}</ul>
+    ${build.unknown.length ? `<p class="build-unknown">${t('Non reconnu : {noms}', { noms: build.unknown.map(u => `« ${escapeHtml(u)} »`).join(', ') })}</p>` : ''}
+    ${L.all().length < L.max ? `<label class="check"><input type="checkbox" data-b-newlist${build.newList ? ' checked' : ''}> ${t('Dans une nouvelle liste « {nom} »', { nom: escapeHtml(listName) })}</label>` : ''}
+    <div class="dlg-actions">
+      <button class="link" type="button" data-b-again>${t('Autre image')}</button>
+      <span class="spacer"></span>
+      <button class="btn" type="button" data-close>${t('Annuler')}</button>
+      <button class="btn primary" type="button" data-b-add${n ? '' : ' disabled'}>${tn(n, 'Ajouter {n} objet', 'Ajouter {n} objets')}</button>
+    </div>`;
+}
+
+function addBuild() {
+  const rows = build.rows.filter(r => r.on && mainRecipe(r.versions[r.sel]));
+  if (!rows.length) return;
+  const nom = build.title || t('Build importé');
+  if (build.newList && !ctx.lists.create(nom)) return;
+  const c = ctx.getCraft();
+  for (const r of rows) {
+    const o = r.versions[r.sel];
+    const cur = c.cibles.find(x => x.id === o.id);
+    if (cur) cur.qte += 1; else c.cibles.push({ id: o.id, qte: 1 });
+  }
+  ctx.saveCraft();
+  build = null;
+  $('#buildDlg').close();
+  ctx.showView?.('craft');
+  renderCraft();
+  ctx.toast(tn(rows.length, '<b>{n}</b> objet du build ajouté à la liste.', '<b>{n}</b> objets du build ajoutés à la liste.'), 'ok');
+}
+
+function bindBuild() {
+  const dlg = $('#buildDlg');
+  const body = $('#buildBody');
+  $('#craftImport').addEventListener('click', () => openBuildImport());
+  body.addEventListener('change', e => {
+    if (e.target.matches('[data-b-file]')) { importBuildImage(e.target.files[0]); return; }
+    if (e.target.matches('[data-b-newlist]')) { build.newList = e.target.checked; return; }
+    const li = e.target.closest('[data-b]');
+    if (!li) return;
+    const r = build.rows[+li.dataset.b];
+    if (e.target.matches('[data-b-on]')) r.on = e.target.checked;
+    if (e.target.matches('[data-b-ver]')) { r.sel = +e.target.value; r.on = !!mainRecipe(r.versions[r.sel]); }
+    renderBuild();
+  });
+  body.addEventListener('click', e => {
+    if (e.target.closest('[data-b-add]')) addBuild();
+    else if (e.target.closest('[data-b-again]')) { build = { state: 'pick' }; renderBuild(); }
+  });
+  body.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-b-drop]')) { e.preventDefault(); body.querySelector('[data-b-file]').click(); }
+  });
+  body.addEventListener('dragover', e => {
+    const z = e.target.closest('[data-b-drop]');
+    if (!z) return;
+    e.preventDefault();
+    z.classList.add('over');
+  });
+  body.addEventListener('dragleave', e => e.target.closest('[data-b-drop]')?.classList.remove('over'));
+  body.addEventListener('drop', e => {
+    if (!e.target.closest('[data-b-drop]')) return;
+    e.preventDefault();
+    importBuildImage(e.dataTransfer.files[0]);
+  });
+  // Ctrl+V : image copiée (export Wakfuli ouvert dans un onglet, outil Capture…)
+  document.addEventListener('paste', e => {
+    if (!dlg.open || build?.state !== 'pick') return;
+    const f = [...(e.clipboardData?.files || [])].find(x => /^image\//.test(x.type));
+    if (f) { e.preventDefault(); importBuildImage(f); }
+  });
+  dlg.addEventListener('close', () => { if (build?.state !== 'read') build = null; });
+}
+
 /* ------------------------------------------------------------ init */
 
 export { decodeShare };
@@ -741,6 +931,7 @@ export { decodeShare };
 export function initCraft(context) {
   ctx = context;
   bindCraft();
+  bindBuild();
   bindMonsters();
   bindPlans();
   // liens objet / monstre partout dans l'appli
@@ -965,10 +1156,6 @@ export function renderOverlay() {
  * ici on retrouve l'objet à partir des lignes lues, puis on l'ajoute à la liste.
  */
 
-// clé de comparaison tolérante aux erreurs d'OCR : sans accents, apostrophes ni ponctuation
-const scanKey = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-  .replace(/['’`´]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
-
 let scanIdx = null;
 function scanIndex() {
   if (scanIdx) return scanIdx;
@@ -983,22 +1170,6 @@ function scanIndex() {
   }
   scanIdx = { byKey, keys: [...byKey.keys()] };
   return scanIdx;
-}
-
-function lev(a, b, max) {
-  if (Math.abs(a.length - b.length) > max) return max + 1;
-  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
-  for (let i = 1; i <= a.length; i++) {
-    const cur = [i];
-    let best = i;
-    for (let j = 1; j <= b.length; j++) {
-      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-      if (cur[j] < best) best = cur[j];
-    }
-    if (best > max) return max + 1;
-    prev = cur;
-  }
-  return prev[b.length];
 }
 
 /** Trouve le nom d'objet le plus probable parmi les lignes lues. Exporté pour les tests. */

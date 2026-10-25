@@ -1,7 +1,7 @@
 // Test du site dans un vrai navigateur (Chromium via Playwright), en français et en anglais.
 // Usage : node scripts/smoke.mjs [url]   (le site doit être servi, ex. npm run serve)
 // Vérifie : aucune erreur JavaScript, import d'un lien de liste, liste de courses, overlay (choix de liste,
-// onglet Fabrication), alerte des plans, badge et filtre PvP et, en anglais, qu'aucun texte de l'interface ne reste sans traduction.
+// onglet Fabrication), alerte des plans, badge et filtre PvP, fenêtre d'import d'un build et, en anglais, qu'aucun texte de l'interface ne reste sans traduction.
 import { chromium } from 'playwright';
 import { existsSync, readFileSync } from 'node:fs';
 import { encodeShare } from '../web/js/craftcore.js';
@@ -81,6 +81,12 @@ async function run(lang) {
   await page.waitForSelector('#craftBase .pvp-tag', { timeout: 15000 }).catch(() => {});
   check(await page.locator('#craftBase .pvp-tag').count() >= 2, `[${lang}] PvP : badge dans les ressources à réunir`);
   await page.fill('#craftSearch', '');
+
+  // Import d'un build : la fenêtre s'ouvre (la lecture de l'image est testée dans tests/buildimport.test.mjs).
+  await page.click('#craftImport');
+  await page.waitForSelector('#buildDlg[open] [data-b-drop]', { timeout: 5000 }).catch(() => {});
+  check(await page.locator('#buildDlg[open] [data-b-drop]').count() === 1, `[${lang}] import d'un build : fenêtre ouverte`);
+  await page.keyboard.press('Escape');
 
   if (lang === 'en') {
     for (const v of ['timers', 'monsters', 'plans', 'settings']) await page.click(`[data-view="${v}"]`).catch(() => {});

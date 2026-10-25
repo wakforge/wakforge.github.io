@@ -710,3 +710,23 @@ body.scan-win { margin: 0; overflow: hidden; background: var(--bg); }
 .scan-status { margin-top: 6px !important; font-size: 13px !important; color: var(--text-3); }
 .scan-status.ok { color: var(--ok) !important; }
 a.btn { text-decoration: none; }
+
+/* ---------------- import d'un build (image du récap Wakfuli) */
+.build-drop { display: grid; place-items: center; gap: 8px; padding: 30px 16px; border: 2px dashed var(--border-strong); border-radius: var(--radius); background: var(--bg-2); text-align: center; color: var(--text-2); cursor: pointer; }
+.build-drop:hover, .build-drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.build-drop b { color: var(--text); font-size: 16px; }
+.build-wait { display: flex; align-items: center; gap: 10px; padding: 20px 4px; color: var(--text-2); }
+.build-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: min(55vh, 520px); overflow: auto; }
+.build-list li { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--radius-sm); background: var(--bg-2); border: 1px solid var(--border); }
+.build-list li.off { opacity: .6; }
+.build-list .ico { width: 34px; height: 34px; flex: none; }
+.build-list .b-main { flex: 1; min-width: 0; }
+.build-list .b-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.build-list input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px; flex: none; }
+.build-list .select { flex: none; }
+.build-unknown { font-size: 13px; color: var(--text-3); }
+@media (max-width: 640px) {
+  .build-list li { flex-wrap: wrap; }
+  .build-list .b-main { flex-basis: calc(100% - 80px); }
+}
+#buildBody p a { color: var(--accent); }
