@@ -1,7 +1,7 @@
 // Service worker : permet d'ouvrir Wak'Forge hors ligne et de l'installer comme une appli.
 // Stratégie « réseau d'abord » : les mises à jour du site sont prises immédiatement,
 // le cache ne sert que si le réseau est indisponible.
-const CACHE = 'wakforge-v6';
+const CACHE = 'wakforge-v7';
 const SHELL = [
   './', 'index.html', 'mentions-legales.html', 'scan.html', 'js/scan.js', 'css/style.css', 'js/app.js', 'js/util.js', 'js/sync.js', 'js/craft.js', 'js/craftcore.js', 'js/buildimport.js', 'js/i18n.js', 'js/i18n-en.js', 'js/config.js',
   'data/data_archimonstre.json', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-32.png',
