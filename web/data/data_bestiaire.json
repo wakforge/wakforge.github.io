@@ -1,6 +1,6 @@
 {
   "version_jeu": "1.93.1.62",
-  "maj": "2026-10-21",
+  "maj": "2026-10-26",
   "raretes": {"0":"Commun","1":"Commun","2":"Rare","3":"Mythique","4":"Légendaire","5":"Relique","6":"Souvenir","7":"Épique"},
   "sources": ["Wakfu Wiki – wakfu.wiki.gg (CC BY-SA 4.0)","Données officielles du jeu (CDN Ankama, version 1.93.1.62)"],
   "remarque": "Noms officiels français tirés des fichiers du jeu ; 229 monstres (événements ou retirés du jeu) restent en anglais. Les objets sont référencés par leur id (voir data_item / data_ressource).",
