@@ -21,16 +21,32 @@ async function api(params) {
 
 const norm = s => s.replace(/_/g, ' ').toLowerCase();
 
-const pages = (await api({ action: 'parse', page: 'Resources', prop: 'links' })).parse.links
-  .filter(l => l.ns === 0 && l.exists).map(l => l.title);
-console.log(pages.length, 'pages liées');
-
+await mkdir(out, { recursive: true });
+const pages = new Set();
+// 1) Pages liées depuis « Resources » et ses modèles de navigation.
+const res = (await api({ action: 'parse', page: 'Resources', prop: 'links|templates|categories' })).parse;
+const links = l => l.filter(x => x.ns === 0 && x.exists !== false).forEach(x => pages.add(x.title));
+links(res.links || []);
+for (const t of (res.templates || []).filter(t => t.ns === 10)) {
+  const tp = (await api({ action: 'parse', page: t.title, prop: 'links' })).parse;
+  links(tp?.links || []);
+}
+// 2) Catégories des ressources.
+for (const cat of ['Trees', 'Ores', 'Crops', 'Wild plants', 'Wild Plants', 'Shoals', 'Resources', 'Harvestable resources']) {
+  let cont = {};
+  do {
+    const r = await api({ action: 'query', list: 'categorymembers', cmtitle: 'Category:' + cat, cmlimit: '500', cmnamespace: '0', ...cont });
+    (r.query?.categorymembers || []).forEach(m => pages.add(m.title));
+    cont = r.continue || null;
+  } while (cont);
+}
+console.log(pages.size, 'pages candidates ; modèles :', (res.templates || []).map(t => t.title).join(', '));
 const rows = [['page', 'nom_fr', 'fichier', 'url']];
 let n = 0;
 for (const page of pages) {
   const p = (await api({ action: 'parse', page, prop: 'images|langlinks|categories' })).parse;
-  const cats = (p.categories || []).map(c => c.category.toLowerCase()).join(' ');
-  if (!/crop|shoal|wild_plant|tree|ore|resource/.test(cats)) continue;
+  const cats = (p.categories || []).map(c => c.category.toLowerCase().replace(/_/g, ' ')).join(' ');
+  if (!/crop|shoal|plant|tree|\bores?\b|resource/.test(cats)) continue;
   const fr = (p.langlinks || []).find(l => l.lang === 'fr')?.title || '';
   // Images de la ressource elle-même : leur nom commence par le titre de la page (ex. Api_Tree_Juvenile.png).
   const imgs = (p.images || []).filter(f => norm(f).startsWith(norm(page)) && /\.(png|jpe?g|gif|webp)$/i.test(f));
