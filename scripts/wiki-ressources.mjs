@@ -45,6 +45,7 @@ const rows = [['page', 'nom_fr', 'fichier', 'url']];
 let n = 0;
 for (const page of pages) {
   const p = (await api({ action: 'parse', page, prop: 'images|langlinks|categories' })).parse;
+  if (!p) continue;
   const cats = (p.categories || []).map(c => c.category.toLowerCase().replace(/_/g, ' ')).join(' ');
   if (!/crop|shoal|plant|tree|\bores?\b|resource/.test(cats)) continue;
   const fr = (p.langlinks || []).find(l => l.lang === 'fr')?.title || '';
