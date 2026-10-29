@@ -1,0 +1,24 @@
+name: Images des ressources (wiki)
+
+# Télécharge les images en jeu des ressources récoltables depuis wakfu.wiki.gg et les fournit en zip
+# (artefact de l'exécution, rien n'est ajouté au dépôt).
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/**']
+    paths: ['scripts/wiki-ressources.mjs', '.github/workflows/wiki-ressources.yml']
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/wiki-ressources.mjs ressources-wiki
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ressources-wiki
+          path: ressources-wiki
+          retention-days: 30
