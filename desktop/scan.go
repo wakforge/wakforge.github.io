@@ -9,10 +9,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
 	"os"
@@ -55,10 +57,12 @@ var (
 const (
 	hotkeyID     = 0x5743 // « WC » : Ctrl+D, objet à fabriquer
 	hotkeyHaveID = 0x5744 // Ctrl+F : ressource à ajouter à « j'ai »
+	hotkeyHsID   = 0x5745 // Ctrl+H : relevé de l'onglet du coffre de havre-sac affiché
 	modControl   = 0x0002
 	modNoRepeat  = 0x4000
 	vkD          = 0x44
 	vkF          = 0x46
+	vkH          = 0x48
 	wmHotkey     = 0x0312
 	pmRemove     = 0x0001
 	srcCopy      = 0x00CC0020
@@ -102,6 +106,20 @@ type scanResult struct {
 	Mode    string   `json:"mode,omitempty"` // "have" pour Ctrl+F
 	Lines   []string `json:"lines,omitempty"`
 	Error   string   `json:"error,omitempty"`
+	Capture string   `json:"capture,omitempty"` // Ctrl+H : adresse de la capture de la fenêtre du jeu (serveur local)
+}
+
+// Dernière capture de la fenêtre du jeu (Ctrl+H), servie à la page sur /capture.png.
+var (
+	captureMu  sync.Mutex
+	capturePNG []byte
+	captureN   int
+)
+
+func lastCapture() []byte {
+	captureMu.Lock()
+	defer captureMu.Unlock()
+	return capturePNG
 }
 
 var scanEnabled atomic.Bool
@@ -120,12 +138,14 @@ func startScanHotkey(self uintptr, send func(scanResult)) {
 			if want && !registered {
 				r, _, _ := procRegisterHotKey.Call(0, hotkeyID, modControl|modNoRepeat, vkD)
 				r2, _, _ := procRegisterHotKey.Call(0, hotkeyHaveID, modControl|modNoRepeat, vkF)
+				procRegisterHotKey.Call(0, hotkeyHsID, modControl|modNoRepeat, vkH)
 				registered = r != 0 || r2 != 0
 				hotkeyOK.Store(registered)
 				regFailed.Store(r == 0 || r2 == 0)
 			} else if !want && registered {
 				procUnregisterHotKey.Call(0, hotkeyID)
 				procUnregisterHotKey.Call(0, hotkeyHaveID)
+				procUnregisterHotKey.Call(0, hotkeyHsID)
 				registered = false
 				hotkeyOK.Store(false)
 			}
@@ -133,6 +153,28 @@ func startScanHotkey(self uintptr, send func(scanResult)) {
 				r, _, _ := procPeekMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0, pmRemove)
 				if r == 0 {
 					break
+				}
+				if msg.Message == wmHotkey && msg.WParam == hotkeyHsID && busy.CompareAndSwap(false, true) {
+					// Ctrl+H : toute la fenêtre du jeu, lue ensuite par la page (web/js/havresac.js)
+					img, err := captureGameWindow()
+					go func() {
+						defer busy.Store(false)
+						if err != nil {
+							send(scanResult{Error: "Capture d'écran impossible : " + err.Error(), Mode: "coffre"})
+							return
+						}
+						var buf bytes.Buffer
+						if err := (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(&buf, img); err != nil {
+							send(scanResult{Error: err.Error(), Mode: "coffre"})
+							return
+						}
+						captureMu.Lock()
+						capturePNG = buf.Bytes()
+						captureN++
+						n := captureN
+						captureMu.Unlock()
+						send(scanResult{Mode: "coffre", Capture: fmt.Sprintf("/capture.png?n=%d", n)})
+					}()
 				}
 				if msg.Message == wmHotkey && (msg.WParam == hotkeyID || msg.WParam == hotkeyHaveID) && busy.CompareAndSwap(false, true) {
 					mode := ""
@@ -230,6 +272,28 @@ func wakfuInFront(self uintptr) bool {
 	lastFg = fgInfo{Exe: filepath.Base(path), Path: path, Title: title, Game: game}
 	lastFgMu.Unlock()
 	return game
+}
+
+// captureGameWindow capture la fenêtre du jeu au premier plan (coffre de havre-sac ouvert).
+func captureGameWindow() (*image.RGBA, error) {
+	h := windows.GetForegroundWindow()
+	if h == 0 {
+		return nil, errors.New("fenêtre du jeu introuvable")
+	}
+	r := windowRect(uintptr(h))
+	w, ht := int(r.R-r.L), int(r.B-r.T)
+	if w < 200 || ht < 200 {
+		return nil, errors.New("fenêtre du jeu trop petite")
+	}
+	var err error
+	for try := 0; try < 3; try++ {
+		var img *image.RGBA
+		if img, err = captureScreen(int(r.L), int(r.T), w, ht); err == nil {
+			return img, nil
+		}
+		time.Sleep(40 * time.Millisecond)
+	}
+	return nil, err
 }
 
 // captureAroundCursor capture la zone autour de la souris. Appelée depuis le fil du raccourci

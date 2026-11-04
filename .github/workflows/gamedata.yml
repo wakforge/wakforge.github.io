@@ -20,6 +20,8 @@ jobs:
           node-version: 22
       - name: Régénérer les données
         run: node scripts/fetch-gamedata.mjs
+      - name: Icônes des ressources (lecture du coffre de havre-sac)
+        run: node scripts/havresac-icones.mjs
       - name: Enregistrer si modifié
         run: |
           if git diff --quiet -- web/data; then

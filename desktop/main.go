@@ -136,6 +136,16 @@ func startServer() error {
 				}
 			}
 		}
+		if r.URL.Path == "/capture.png" { // dernière capture Ctrl+H (coffre de havre-sac)
+			b := lastCapture()
+			if b == nil {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(b)
+			return
+		}
 		if strings.HasSuffix(r.URL.Path, ".webmanifest") {
 			w.Header().Set("Content-Type", "application/manifest+json")
 		}

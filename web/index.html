@@ -37,6 +37,7 @@
     </div>
     <nav class="tabs" role="tablist" aria-label="Sections">
       <button role="tab" class="tab" data-view="craft" aria-selected="true">Craft</button>
+      <button role="tab" class="tab" data-view="havresac" aria-selected="false">Havre-sac</button>
       <button role="tab" class="tab" data-view="plans" aria-selected="false">Plans</button>
       <button role="tab" class="tab" data-view="monsters" aria-selected="false">Bestiaire</button>
       <button role="tab" class="tab" data-view="timers" aria-selected="false">Timers <span class="tab-badge" id="readyBadge" hidden>0</span></button>
@@ -154,6 +155,35 @@
       </div>
     </section>
 
+    <!-- ============ HAVRE-SAC ============ -->
+    <section class="view" id="view-havresac" hidden>
+      <p class="loading">Chargement des données du jeu…</p>
+      <div class="view-body" hidden>
+        <p data-i18n>Ouvre ton <b>coffre de compte</b> dans le jeu, fais une capture de tout l'écran (<kbd>Impr. écran</kbd> ou <kbd>Win</kbd>+<kbd>Maj</kbd>+<kbd>S</kbd>) puis colle-la ici avec <kbd>Ctrl</kbd>+<kbd>V</kbd> : une capture par onglet du coffre. Les quantités remplissent « J'ai » dans tes listes de craft.</p>
+        <label class="build-drop" id="hsDrop" tabindex="0">
+          <b>Dépose la capture ici</b>
+          <span>ou clique pour la choisir, ou colle-la avec Ctrl+V</span>
+          <input type="file" id="hsFile" accept="image/*" hidden>
+        </label>
+        <div id="hsRead" class="hs-read" hidden></div>
+        <h3 class="hs-h">Onglets enregistrés</h3>
+        <div id="hsTabs" class="hs-tabs"></div>
+        <div id="hsTableWrap" hidden>
+          <div class="toolbar">
+            <input id="hsSearch" type="search" placeholder="Rechercher une ressource" aria-label="Rechercher une ressource">
+          </div>
+          <p class="muted small" id="hsCount"></p>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Ressource</th><th class="num">Quantité</th><th>Onglets</th></tr></thead>
+              <tbody id="hsBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <p class="hint-line" data-i18n>Avec l'appli PC, c'est plus rapide : coffre ouvert dans le jeu, appuie sur <b>Ctrl+H</b> sur chaque onglet. La capture est lue sur ton appareil, rien n'est envoyé.</p>
+      </div>
+    </section>
+
     <!-- ============ PLANS ============ -->
     <section class="view" id="view-plans" hidden>
       <p class="loading">Chargement des données du jeu…</p>
@@ -217,7 +247,7 @@
           <div class="jobs-grid" id="jobsGrid"></div>
         </div>
         <div class="setting desktop-only" hidden>
-          <div><h3>Scan d'objet <kbd>Ctrl</kbd>+<kbd>D</kbd> / <kbd>Ctrl</kbd>+<kbd>F</kbd></h3><p data-i18n>Dans WAKFU, passe la souris sur un objet pour afficher son infobulle, puis appuie sur <b>Ctrl+D</b> : une petite fenêtre s'ouvre à côté pour choisir la rareté et la quantité avant de l'ajouter à ta liste de craft.<br><b>Ctrl+F</b> sur une ressource de ta liste l'ajoute à « J'ai » : la quantité proposée est celle du bandeau « Possédés » de l'infobulle (sur moi, équipé, coffre, pacte), ou à défaut ce qu'il manque. Les raccourcis n'agissent que quand le jeu est au premier plan.</p><p class="scan-status" id="scanStatus"></p></div>
+          <div><h3>Scan d'objet <kbd>Ctrl</kbd>+<kbd>D</kbd> / <kbd>Ctrl</kbd>+<kbd>F</kbd> / <kbd>Ctrl</kbd>+<kbd>H</kbd></h3><p data-i18n>Dans WAKFU, passe la souris sur un objet pour afficher son infobulle, puis appuie sur <b>Ctrl+D</b> : une petite fenêtre s'ouvre à côté pour choisir la rareté et la quantité avant de l'ajouter à ta liste de craft.<br><b>Ctrl+F</b> sur une ressource de ta liste l'ajoute à « J'ai » : la quantité proposée est celle du bandeau « Possédés » de l'infobulle (sur moi, équipé, coffre, pacte), ou à défaut ce qu'il manque. <br><b>Ctrl+H</b>, coffre de compte ouvert : relève l'onglet affiché et l'enregistre dans l'onglet Havre-sac. Les raccourcis n'agissent que quand le jeu est au premier plan.</p><p class="scan-status" id="scanStatus"></p></div>
           <div class="setting-ctl"><label class="switch"><input type="checkbox" id="setScan"><span></span></label></div>
         </div>
         <div class="setting desktop-only" hidden>
