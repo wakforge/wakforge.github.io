@@ -33,14 +33,16 @@ function render() {
     return;
   }
   if (pop.state === 'coffre') {
+    const opt = (id, label, extra = '') => `<button type="button" class="btn small" role="radio" aria-checked="${pop.pick === id}" data-sp-tab="${escapeHtml(id)}">${label}${extra}</button>`;
     root.innerHTML = `<div class="sp">${head}<div class="sp-msg">${pop.html}</div>
       <div class="sp-label">${t('Ranger dans')}</div>
-      <div class="sp-tabs">
-        ${pop.canNew ? `<button type="button" class="btn small${pop.tabs.some(o => o.same) ? '' : ' primary'}" data-sp-tab="new">＋ ${t('Nouvel onglet')}</button>` : ''}
-        ${pop.tabs.map(o => `<button type="button" class="btn small${o.same ? ' primary' : ''}" data-sp-tab="${escapeHtml(o.id)}" title="${t('Remplacer le contenu de cet onglet')}">${t('Remplacer « {nom} »', { nom: escapeHtml(o.nom) })} <span class="muted">${o.n} / 100</span></button>`).join('')}
+      <div class="sp-tabs" role="radiogroup" aria-label="${t('Ranger dans')}">
+        ${pop.canNew ? opt('new', `＋ ${t('Nouvel onglet')}`) : ''}
+        ${pop.tabs.map(o => opt(o.id, t('Remplacer « {nom} »', { nom: escapeHtml(o.nom) }), ` <span class="muted">${o.n} / 100</span>`)).join('')}
       </div>
-      <footer class="sp-foot"><button class="btn small ghost" type="button" data-sp-close>${t('Annuler')}</button></footer></div>`;
-    root.querySelector('.sp-tabs .primary')?.focus();
+      <footer class="sp-foot"><button class="btn small ghost" type="button" data-sp-close>${t('Annuler')}</button>
+        <button class="btn small primary" type="button" data-sp-coffre-ok${pop.pick ? '' : ' disabled'}>${t('Confirmer')}</button></footer></div>`;
+    root.querySelector('[data-sp-coffre-ok]')?.focus();
     return;
   }
   if (pop.state === 'done') {
@@ -116,6 +118,7 @@ window.wfPop = state => {
   pop = { sel: 0, ...state };
   if (pop.owned) pop.use = new Set(PLACES.map(([k]) => k));
   if (pop.state === 'choose') pop.qte = defaultQte(pop.versions[pop.sel]);
+  if (pop.state === 'coffre') pop.pick = pop.tabs.find(o => o.same)?.id || (pop.canNew ? 'new' : null);
   render();
 };
 
@@ -126,8 +129,10 @@ root.addEventListener('click', e => {
   if (b.matches('[data-sp-ok]')) { confirm(false); return; }
   if (b.matches('[data-sp-have]')) { confirm(true); return; }
   if (b.matches('[data-sp-item]')) { const id = pop.itemId; pop = null; render(); call('nativeScanItem', id); return; }
-  if (b.matches('[data-sp-tab]')) {
-    const id = b.dataset.spTab, o = pop.tabs.find(x => x.id === id);
+  if (b.matches('[data-sp-tab]')) { pop.pick = b.dataset.spTab; render(); return; }
+  if (b.matches('[data-sp-coffre-ok]')) {
+    const id = pop.pick, o = pop.tabs.find(x => x.id === id);
+    if (!id) return;
     call('nativeScanCoffre', id);
     pop = { state: 'done', mode: 'coffre', html: o ? t('Onglet « {nom} » remplacé.', { nom: escapeHtml(o.nom) }) : t('Nouvel onglet créé.') };
     render();
