@@ -89,14 +89,18 @@ function chain(prof, pMin, pMax) {
     for (const b of peaks) {
       const p = b - a;
       if (p < pMin || p > pMax) continue;
-      let n = 2, last = b, sum = prof[a] + prof[b];
-      for (;;) {
-        let next = -1;
-        for (let d = -1; d <= 1; d++) if (peak(last + p + d) && (next < 0 || prof[last + p + d] > prof[next])) next = last + p + d;
+      // suite régulière ; des pics peuvent manquer (colonne de cases vides, au cadre sombre)
+      let n = 2, hits = 2, last = b, sum = prof[a] + prof[b];
+      while (n < 10) {
+        let next = -1, k = 1;
+        for (; k <= 10 - n && next < 0; k++) {
+          for (let d = -1; d <= 1; d++) if (peak(last + k * p + d) && (next < 0 || prof[last + k * p + d] > prof[next])) next = last + k * p + d;
+        }
         if (next < 0) break;
-        n++; sum += prof[next]; last = next;
+        n += k - 1; hits++; sum += prof[next]; last = next;
       }
       const pitch = n > 1 ? (last - a) / (n - 1) : p;
+      if (hits < 3 && n > 2) continue;
       if (!best || n > best.n || (n === best.n && sum > best.sum)) best = { start: a, n, pitch, sum };
     }
   }
@@ -290,12 +294,10 @@ export function readCoffre(img, icons, ressources) {
       const sample = iconSample(G, cx, cy);
       if (isEmpty(sample)) continue;
       const qty = readQty(G, cx, cy);
-      let [best, second] = matchIcon(sample, icons);
-      let ok = best.d < SURE || (best.d < MAX_DIST && second.d - best.d > MIN_GAP);
-      if (!ok && qty === 0) {
-        [best, second] = matchGray(sample, icons);
-        ok = best.d < GRAY_MAX && second.d - best.d > GRAY_GAP;
-      }
+      // case à 0 : icône grisée et assombrie, comparée en niveaux de gris (les couleurs tromperaient)
+      const [best, second] = qty === 0 ? matchGray(sample, icons) : matchIcon(sample, icons);
+      const ok = qty === 0 ? best.d < GRAY_MAX && second.d - best.d > GRAY_GAP
+        : best.d < SURE || (best.d < MAX_DIST && second.d - best.d > MIN_GAP);
       const cell = { row, col, qty, gfx: null, id: null, dist: +best.d.toFixed(3), gap: +(second.d - best.d).toFixed(3), rarete: frameRarity(G, cx, cy) };
       if (ok) {
         cell.gfx = icons.gfx[best.i];

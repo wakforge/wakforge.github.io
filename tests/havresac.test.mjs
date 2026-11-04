@@ -16,6 +16,22 @@ test('coffre : la grille de 10 colonnes est trouvée, pas celle de l\'inventaire
   assert.deepEqual(findGrid(shot('coffre-81-156.png')), { x: 422, y: 108, pitch: 63, cols: 10, rows: 10 });
 });
 
+test('coffre : onglet presque vide (colonnes de cases vides au milieu), pas la grille de l\'inventaire', () => {
+  // capture du jeu avec la fenêtre de scan par-dessus les deux dernières colonnes
+  const g = findGrid(shot('coffre-156.png'));
+  assert.equal(g.x, 422);
+  assert.equal(g.y, 148);
+  assert.equal(g.rows, 10);
+  assert.ok(g.cols >= 9);
+  const { cells } = readCoffre(shot('coffre-156.png'), icons, res);
+  const at = (r, c) => byId.get(cells.find(x => x.row === r && x.col === c)?.id)?.nom;
+  assert.equal(at(3, 0), 'Tissu sombre');
+  assert.equal(at(9, 0), 'Peau de Gerbouille');
+  assert.equal(cells.find(x => x.row === 3 && x.col === 0).qty, 459);
+  // case à 0 sans ressource ressemblante : laissée inconnue plutôt que mal reconnue
+  assert.equal(cells.find(x => x.row === 7 && x.col === 2).id, null);
+});
+
 test('coffre : quantités de toutes les cases (milliers, « 0 », case sans nombre = 1)', () => {
   const { cells } = readCoffre(shot('coffre-81-156.png'), icons, res);
   assert.deepEqual(qtyRows(cells), [
