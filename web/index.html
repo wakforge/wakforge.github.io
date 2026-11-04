@@ -166,20 +166,19 @@
           <input type="file" id="hsFile" accept="image/*" hidden>
         </label>
         <div id="hsRead" class="hs-read" hidden></div>
-        <h3 class="hs-h">Onglets enregistrés</h3>
-        <div id="hsTabs" class="hs-tabs"></div>
-        <div id="hsTableWrap" hidden>
-          <div class="toolbar">
-            <input id="hsSearch" type="search" placeholder="Rechercher une ressource" aria-label="Rechercher une ressource">
-          </div>
-          <p class="muted small" id="hsCount"></p>
+        <div class="hs-coffre">
+          <div class="hs-main" id="hsMain"></div>
+          <aside class="hs-side" id="hsSide"></aside>
+        </div>
+        <details class="hs-totals" id="hsTotals" hidden>
+          <summary id="hsTotalsSum"></summary>
           <div class="table-wrap">
             <table class="table">
               <thead><tr><th>Ressource</th><th class="num">Quantité</th><th>Onglets</th></tr></thead>
               <tbody id="hsBody"></tbody>
             </table>
           </div>
-        </div>
+        </details>
         <p class="hint-line" data-i18n>Avec l'appli PC, c'est plus rapide : coffre ouvert dans le jeu, appuie sur <b>Ctrl+H</b> sur chaque onglet. La capture est lue sur ton appareil, rien n'est envoyé.</p>
       </div>
     </section>
@@ -338,6 +337,8 @@
   <dialog id="itemDlg" class="dlg wide">
     <div id="itemBody"></div>
   </dialog>
+
+  <dialog id="hsDlg" class="dlg"></dialog>
 
   <dialog id="buildDlg" class="dlg wide">
     <div id="buildBody"></div>

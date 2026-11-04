@@ -699,7 +699,10 @@ function bindPlans() {
 
 let itemShown = null;
 
-export async function openItem(id) {
+/**
+ * Fiche objet. opts.qty (havre-sac) : { label, value, onSave(n), onRemove() } ajoute en haut un réglage de quantité.
+ */
+export async function openItem(id, opts = {}) {
   await loadGamedata();
   const o = IDX.byId.get(id);
   if (!o) return;
@@ -719,6 +722,14 @@ export async function openItem(id) {
         <p class="muted small">${escapeHtml(o.type)} · ${t('Niveau {n}', { n: o.niveau })}${o.nom_en ? ` · <i>${escapeHtml(o.nom_en)}</i>` : ''}</p>
       </div>
     </div>
+    ${opts.qty ? `<div class="hs-qty">
+      <span class="hs-qty-lbl">${escapeHtml(opts.qty.label)}</span>
+      <div class="stepper"><button type="button" data-q-step="-1" aria-label="${t('Moins')}">−</button>
+        <input type="number" min="0" max="9999999" value="${opts.qty.value}" data-q-val aria-label="${t('Quantité')}">
+        <button type="button" data-q-step="1" aria-label="${t('Plus')}">+</button></div>
+      <button class="btn primary" type="button" data-q-save>${t('Enregistrer')}</button>
+      ${opts.qty.onRemove ? `<button class="btn ghost danger" type="button" data-q-remove>${t('Vider la case')}</button>` : ''}
+    </div>` : ''}
     ${planSection(o)}
     ${o.stats?.length ? `<div class="stats">${o.stats.map(s => `<span>${escapeHtml(s)}</span>`).join('')}</div>` : ''}
     ${(o.recettes || []).map(rec => `<section><h4>${jobIcon(rec.metier, '🔨')} ${t('Recette')} · ${escapeHtml(jobName(rec.metier))} ${rec.niveau}${rec.amelioration ? ` · ${t('amélioration')}` : ''}${rec.quantite > 1 ? ` · ${t('donne {n}', { n: rec.quantite })}` : ''}</h4>
@@ -733,6 +744,17 @@ export async function openItem(id) {
     </div>`;
   const add = $('#itemBody [data-add]');
   if (add) add.onclick = () => { addTarget(o, 1); dlg.close(); };
+  if (opts.qty) {
+    const box = $('#itemBody .hs-qty'), inp = box.querySelector('[data-q-val]');
+    const save = () => { opts.qty.onSave(Math.min(9999999, Math.max(0, Math.floor(+inp.value) || 0))); dlg.close(); };
+    box.onclick = e => {
+      const st = e.target.closest('[data-q-step]');
+      if (st) inp.value = Math.max(0, (Math.floor(+inp.value) || 0) + (+st.dataset.qStep) * (e.shiftKey ? 10 : 1));
+      else if (e.target.closest('[data-q-save]')) save();
+      else if (e.target.closest('[data-q-remove]')) { opts.qty.onRemove(); dlg.close(); }
+    };
+    inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); save(); } };
+  }
   if (!dlg.open) dlg.showModal();
   dlg.scrollTop = 0;
 }

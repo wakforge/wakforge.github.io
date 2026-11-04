@@ -91,12 +91,27 @@ async function run(lang) {
   // Havre-sac : capture d'un onglet du coffre, enregistrement, puis « J'ai » rempli dans la liste
   await page.click('[data-view="havresac"]');
   await page.setInputFiles('#hsFile', new URL('../tests/fixtures/coffre-12-81.png', import.meta.url).pathname);
-  await page.waitForSelector('#hsRead [data-hs-save]', { timeout: 20000 }).catch(() => {});
-  const cells = await page.locator('#hsRead .hs-cell').count();
-  check(cells >= 80, `[${lang}] havre-sac : ${cells} cases reconnues sur la capture`);
-  await page.click('#hsRead [data-hs-save]').catch(() => {});
+  await page.waitForSelector('#hsRead [data-hs-new]', { timeout: 20000 }).catch(() => {});
+  await page.click('#hsRead [data-hs-new]').catch(() => {});
+  const cells = await page.locator('.hs-grid .hs-slot:not(.empty)').count();
+  check(cells >= 80, `[${lang}] havre-sac : ${cells} cases remplies dans la grille`);
   const hsRows = await page.locator('#hsBody tr').count();
-  check(hsRows >= 80, `[${lang}] havre-sac : ${hsRows} ressources enregistrées`);
+  check(hsRows >= 80, `[${lang}] havre-sac : ${hsRows} ressources au total`);
+  // clic sur un objet : fiche avec la quantité modifiable
+  await page.click('.hs-grid .hs-slot[data-slot="0"]');
+  await page.waitForSelector('#itemDlg[open] .hs-qty', { timeout: 5000 }).catch(() => {});
+  await page.fill('#itemDlg [data-q-val]', '12').catch(() => {});
+  await page.click('#itemDlg [data-q-save]').catch(() => {});
+  const q0 = await page.locator('.hs-grid .hs-slot[data-slot="0"] .hs-n').innerText().catch(() => '');
+  check(q0 === '12', `[${lang}] havre-sac : quantité modifiée depuis la fiche (${q0})`);
+  // onglet créé à la main, puis supprimé avec la fenêtre de l'appli
+  await page.click('[data-hs-add]');
+  await page.click('#hsDlg[open] .btn.primary').catch(() => {});
+  const tabs = await page.locator('.hs-tabbtn[data-tab]').count();
+  await page.click('[data-hs-del]');
+  await page.click('#hsDlg[open] .btn.danger-fill').catch(() => {});
+  const tabs2 = await page.locator('.hs-tabbtn[data-tab]').count();
+  check(tabs === 2 && tabs2 === 1, `[${lang}] havre-sac : onglet créé puis supprimé (${tabs} → ${tabs2})`);
   await page.click('[data-view="craft"]');
   await page.waitForSelector('#craftBase tr', { timeout: 5000 }).catch(() => {});
   const filled = await page.locator('#craftBase input.have').evaluateAll(els => els.filter(e => +e.value > 0).length);
