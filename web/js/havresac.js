@@ -8,6 +8,8 @@ const P = 63;               // pas de la grille à l'échelle de référence (in
 const CELL = 56;            // côté d'une case, cadre compris
 // une case est reconnue si l'icône la plus proche est très proche, ou assez proche et nettement devant la suivante
 const SURE = 0.12, MAX_DIST = 0.3, MIN_GAP = 0.06;
+// case à 0 (icône grisée) : comparaison en niveaux de gris
+const GRAY_MAX = 0.3, GRAY_GAP = 0.05;
 
 /* --------------------------------------------------------- icônes de référence */
 
@@ -177,6 +179,29 @@ function matchIcon(sample, icons) {
   return res.sort((p, q) => p.d - q.d).slice(0, 3);
 }
 
+/** Case à 0 : le jeu grise l'icône et l'assombrit. On compare alors les niveaux de gris par corrélation
+ *  (indépendante de la luminosité et du contraste) : d = 1 - corrélation. */
+function matchGray(sample, icons) {
+  const N = ICON_N, per = N * N;
+  const L = p => 0.3 * sample[p * 3] + 0.59 * sample[p * 3 + 1] + 0.11 * sample[p * 3 + 2];
+  const edge = [];
+  for (let k = 0; k < N; k++) edge.push(L(k), L(N + k), L(k * N + N - 1), L(k * N + N - 2));
+  const bg = median(edge), res = [];
+  for (let i = 0; i < icons.n; i++) {
+    let sx = 0, sy = 0, sxx = 0, sxy = 0, syy = 0;
+    for (let p = 0; p < per; p++) {
+      if (!MASK[p]) continue;
+      const a = icons.a[i * per + p], q = (i * per + p) * 3;
+      const x = (0.3 * icons.rgb[q] + 0.59 * icons.rgb[q + 1] + 0.11 * icons.rgb[q + 2]) * a + bg * (1 - a), y = L(p);
+      sx += x; sy += y; sxx += x * x; sxy += x * y; syy += y * y;
+    }
+    const n = MASK_N, cov = sxy / n - (sx / n) * (sy / n);
+    const vx = sxx / n - (sx / n) ** 2, vy = syy / n - (sy / n) ** 2;
+    res.push({ i, d: 1 - cov / Math.sqrt(vx * vy + 1e-9) });
+  }
+  return res.sort((p, q) => p.d - q.d).slice(0, 2);
+}
+
 function isEmpty(sample) {
   let s = 0, s2 = 0;
   for (const v of sample) { s += v; s2 += v * v; }
@@ -265,9 +290,14 @@ export function readCoffre(img, icons, ressources) {
       const sample = iconSample(G, cx, cy);
       if (isEmpty(sample)) continue;
       const qty = readQty(G, cx, cy);
-      const [best, second] = matchIcon(sample, icons);
+      let [best, second] = matchIcon(sample, icons);
+      let ok = best.d < SURE || (best.d < MAX_DIST && second.d - best.d > MIN_GAP);
+      if (!ok && qty === 0) {
+        [best, second] = matchGray(sample, icons);
+        ok = best.d < GRAY_MAX && second.d - best.d > GRAY_GAP;
+      }
       const cell = { row, col, qty, gfx: null, id: null, dist: +best.d.toFixed(3), gap: +(second.d - best.d).toFixed(3), rarete: frameRarity(G, cx, cy) };
-      if (best.d < SURE || (best.d < MAX_DIST && second.d - best.d > MIN_GAP)) {
+      if (ok) {
         cell.gfx = icons.gfx[best.i];
         const cands = byGfx.get(cell.gfx) || [];
         const pick = cands.find(r => r.rarete === cell.rarete || (cell.rarete === 1 && r.rarete === 0)) || cands[0];
