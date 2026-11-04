@@ -9,7 +9,7 @@ import { initHavresac, renderHavresac, scanCoffre } from './hsview.js';
 /** Portrait de l'archimonstre (wakfu.wiki.gg), ou son initiale s'il n'y en a pas. */
 const archiPortrait = (m, px, cls) => monsterPortrait({ image: m?.image, nom: m?.name }, { px, cls: `archi ${cls}` });
 
-const APP_VERSION = '2.24.0';
+const APP_VERSION = '2.24.1';
 const STORE_KEY = 'archimonstres.state.v1';
 const DEVICE_KEY = 'archimonstres.device.v1';
 const $ = (s, r = document) => r.querySelector(s);

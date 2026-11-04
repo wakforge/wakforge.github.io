@@ -155,8 +155,11 @@ func startScanHotkey(self uintptr, send func(scanResult)) {
 					break
 				}
 				if msg.Message == wmHotkey && msg.WParam == hotkeyHsID && busy.CompareAndSwap(false, true) {
-					// Ctrl+H : toute la fenêtre du jeu, lue ensuite par la page (web/js/havresac.js)
+					// Ctrl+H : toute la fenêtre du jeu, lue ensuite par la page (web/js/havresac.js).
+					// Capture d'abord, puis ouverture de la petite fenêtre de scan (sinon elle serait sur la capture).
+					rememberScanOrigin()
 					img, err := captureGameWindow()
+					send(scanResult{Pending: true, Mode: "coffre"})
 					go func() {
 						defer busy.Store(false)
 						if err != nil {

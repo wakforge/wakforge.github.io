@@ -487,4 +487,5 @@ export const EN = {
   "La capture est lue sur ton appareil, rien n'est envoyé.": "The capture is read on your device, nothing is sent.",
   "Avec l'appli PC, c'est plus rapide : coffre ouvert dans le jeu, appuie sur <b>Ctrl+H</b> sur chaque onglet. La capture est lue sur ton appareil, rien n'est envoyé.": "With the PC app it's faster: with the chest open in the game, press <b>Ctrl+H</b> on each tab. The capture is read on your device, nothing is sent.",
   "Havre-sac : onglet « {nom} » relevé ({n} ressources). Renomme-le dans l'onglet Havre-sac si besoin.": "Haven bag: tab “{nom}” read ({n} resources). Rename it in the Haven bag tab if needed.",
+  "Lecture du coffre…": "Reading the chest…",
 };

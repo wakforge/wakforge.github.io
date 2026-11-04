@@ -79,6 +79,7 @@ export async function scanCoffre(r) {
     if (ctx.native?.on && window.nativeScanShow) ctx.native.scanShow({ state: 'msg', html, kind });
     else ctx.toast(html, kind);
   };
+  if (r.pending) { tell(t('Lecture du coffre…'), ''); return; }
   if (r.error) { tell(escapeHtml(r.error), 'error'); return; }
   try {
     const blob = await fetch(r.capture, { cache: 'no-store' }).then(x => { if (!x.ok) throw new Error(String(x.status)); return x.blob(); });
