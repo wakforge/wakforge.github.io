@@ -175,8 +175,8 @@ async function imagePixels(file) {
   return g.getImageData(0, 0, cv.width, cv.height);
 }
 
-/** Lit une capture ; auto (Ctrl+H) : rangée directement dans l'onglet correspondant, ou un nouvel onglet. */
-async function readCapture(file, { auto = false } = {}) {
+/** Lit une capture ; le choix de l'onglet (nouveau ou existant à remplacer) reste à faire. */
+async function readCapture(file) {
   if (!file || !/^image\//.test(file.type)) { pending = { err: t('Ce fichier n\'est pas une image.') }; render(); return pending; }
   pending = { busy: true };
   render();
@@ -204,13 +204,8 @@ async function readCapture(file, { auto = false } = {}) {
   } catch (e) {
     pending = { err: t('Lecture impossible : {err}', { err: escapeHtml(e?.message || String(e)) }) };
   }
-  const read = pending;
-  if (auto && read.cases) {
-    const tab = read.same || addTab();
-    if (tab) storeIn(tab);
-    read.tab = tab;
-  } else render();
-  return read;
+  render();
+  return pending;
 }
 
 function storeIn(tab) {
@@ -221,7 +216,8 @@ function storeIn(tab) {
   changed();
 }
 
-/** Ctrl+H dans l'appli PC : capture de la fenêtre du jeu, lue et rangée directement. */
+/** Ctrl+H dans l'appli PC : capture de la fenêtre du jeu, lue, puis la fenêtre de scan propose
+ *  de la ranger dans un nouvel onglet ou à la place d'un onglet existant. */
 export async function scanCoffre(r) {
   const tell = (html, kind) => {
     if (ctx.native?.on && window.nativeScanShow) ctx.native.scanShow({ state: 'msg', html, kind });
@@ -231,14 +227,26 @@ export async function scanCoffre(r) {
   if (r.error) { tell(escapeHtml(r.error), 'error'); return; }
   try {
     const blob = await fetch(r.capture, { cache: 'no-store' }).then(x => { if (!x.ok) throw new Error(String(x.status)); return x.blob(); });
-    const read = await readCapture(new File([blob], 'coffre.png', { type: 'image/png' }), { auto: true });
+    const read = await readCapture(new File([blob], 'coffre.png', { type: 'image/png' }));
     if (read.err) { tell(read.err, 'warn'); return; }
-    if (!read.tab) { tell(t('{n} onglets au maximum.', { n: MAX_ONGLETS }), 'warn'); return; }
-    tell(t('Havre-sac : onglet « {nom} » relevé ({n} ressources). Renomme-le dans l\'onglet Havre-sac si besoin.', { nom: escapeHtml(read.tab.nom), n: read.n }), 'ok');
+    if (!(ctx.native?.on && window.nativeScanShow)) { tell(t('Coffre lu : choisis où le ranger dans l\'onglet Havre-sac.'), 'ok'); return; }
+    const tabs = hs().onglets.map(o => ({ id: o.id, nom: o.nom, n: filled(o), same: o === read.same }));
+    tabs.sort((a, b) => b.same - a.same);
+    ctx.native.scanShow({
+      state: 'coffre', mode: 'coffre', tabs, canNew: hs().onglets.length < MAX_ONGLETS,
+      html: `<b>${tn(read.n, '{n} ressource reconnue', '{n} ressources reconnues')}</b> · ${tn(read.total, '{n} objet', '{n} objets', { n: fmtN(read.total) })}`,
+    });
   } catch (e) {
     tell(t('Lecture impossible : {err}', { err: escapeHtml(e?.message || String(e)) }), 'error');
   }
 }
+
+/** Choix fait dans la fenêtre de scan : « new » ou l'identifiant de l'onglet à remplacer. */
+window.wfScanCoffre = choice => {
+  if (!pending?.cases) return;
+  const o = choice === 'new' ? addTab() : hs().onglets.find(x => x.id === choice);
+  if (o) storeIn(o);
+};
 
 /* ------------------------------------------------------------ affichage */
 

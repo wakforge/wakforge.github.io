@@ -20,7 +20,7 @@ const minQte = () => (pop?.owned ? 0 : 1);
 
 function render() {
   if (!pop) { root.innerHTML = ''; return; }
-  const head = `<header class="sp-head"><b>${pop.mode === 'have' ? t('J\'en ai') : t('Scan d\'objet')}</b><button class="ovl-btn" type="button" data-sp-close title="${t('Fermer (Échap)')}" aria-label="${t('Fermer')}">✕</button></header>`;
+  const head = `<header class="sp-head"><b>${pop.mode === 'coffre' ? t('Coffre de havre-sac') : pop.mode === 'have' ? t('J\'en ai') : t('Scan d\'objet')}</b><button class="ovl-btn" type="button" data-sp-close title="${t('Fermer (Échap)')}" aria-label="${t('Fermer')}">✕</button></header>`;
   if (pop.state === 'loading') {
     root.innerHTML = `<div class="sp">${head}<div class="sp-msg"><span class="sp-spin"></span>${t('Lecture de l\'objet sous la souris…')}</div></div>`;
     return;
@@ -30,6 +30,17 @@ function render() {
       <footer class="sp-foot">${pop.itemId ? `<button class="btn small" type="button" data-sp-item>${t('Voir la provenance')}</button>` : ''}
         <button class="btn small primary" type="button" data-sp-close>${t('Fermer')}</button></footer></div>`;
     root.querySelector('.sp-foot .primary')?.focus();
+    return;
+  }
+  if (pop.state === 'coffre') {
+    root.innerHTML = `<div class="sp">${head}<div class="sp-msg">${pop.html}</div>
+      <div class="sp-label">${t('Ranger dans')}</div>
+      <div class="sp-tabs">
+        ${pop.canNew ? `<button type="button" class="btn small${pop.tabs.some(o => o.same) ? '' : ' primary'}" data-sp-tab="new">＋ ${t('Nouvel onglet')}</button>` : ''}
+        ${pop.tabs.map(o => `<button type="button" class="btn small${o.same ? ' primary' : ''}" data-sp-tab="${escapeHtml(o.id)}" title="${t('Remplacer le contenu de cet onglet')}">${t('Remplacer « {nom} »', { nom: escapeHtml(o.nom) })} <span class="muted">${o.n} / 100</span></button>`).join('')}
+      </div>
+      <footer class="sp-foot"><button class="btn small ghost" type="button" data-sp-close>${t('Annuler')}</button></footer></div>`;
+    root.querySelector('.sp-tabs .primary')?.focus();
     return;
   }
   if (pop.state === 'done') {
@@ -115,6 +126,14 @@ root.addEventListener('click', e => {
   if (b.matches('[data-sp-ok]')) { confirm(false); return; }
   if (b.matches('[data-sp-have]')) { confirm(true); return; }
   if (b.matches('[data-sp-item]')) { const id = pop.itemId; pop = null; render(); call('nativeScanItem', id); return; }
+  if (b.matches('[data-sp-tab]')) {
+    const id = b.dataset.spTab, o = pop.tabs.find(x => x.id === id);
+    call('nativeScanCoffre', id);
+    pop = { state: 'done', mode: 'coffre', html: o ? t('Onglet « {nom} » remplacé.', { nom: escapeHtml(o.nom) }) : t('Nouvel onglet créé.') };
+    render();
+    setTimeout(() => { if (pop?.state === 'done') closeWin(); }, 700);
+    return;
+  }
   if (b.matches('[data-sp-rar]')) { selectVersion(+b.dataset.spRar); return; }
   if (b.matches('[data-sp-own]')) {
     const k = b.dataset.spOwn;
