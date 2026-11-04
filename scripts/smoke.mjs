@@ -88,8 +88,22 @@ async function run(lang) {
   check(await page.locator('#buildDlg[open] [data-b-drop]').count() === 1, `[${lang}] import d'un build : fenêtre ouverte`);
   await page.keyboard.press('Escape');
 
+  // Havre-sac : capture d'un onglet du coffre, enregistrement, puis « J'ai » rempli dans la liste
+  await page.click('[data-view="havresac"]');
+  await page.setInputFiles('#hsFile', new URL('../tests/fixtures/coffre-12-81.png', import.meta.url).pathname);
+  await page.waitForSelector('#hsRead [data-hs-save]', { timeout: 20000 }).catch(() => {});
+  const cells = await page.locator('#hsRead .hs-cell').count();
+  check(cells >= 80, `[${lang}] havre-sac : ${cells} cases reconnues sur la capture`);
+  await page.click('#hsRead [data-hs-save]').catch(() => {});
+  const hsRows = await page.locator('#hsBody tr').count();
+  check(hsRows >= 80, `[${lang}] havre-sac : ${hsRows} ressources enregistrées`);
+  await page.click('[data-view="craft"]');
+  await page.waitForSelector('#craftBase tr', { timeout: 5000 }).catch(() => {});
+  const filled = await page.locator('#craftBase input.have').evaluateAll(els => els.filter(e => +e.value > 0).length);
+  console.log(`  · « J'ai » rempli par le havre-sac pour ${filled} ressource(s) de la liste de test`);
+
   if (lang === 'en') {
-    for (const v of ['timers', 'monsters', 'plans', 'settings']) await page.click(`[data-view="${v}"]`).catch(() => {});
+    for (const v of ['timers', 'monsters', 'plans', 'settings', 'havresac']) await page.click(`[data-view="${v}"]`).catch(() => {});
     const missing = await page.evaluate(() => import('./js/i18n.js').then(m => m.missingKeys()));
     check(!missing.length, `[en] textes traduits${missing.length ? ` (manquants : ${missing.slice(0, 5).join(' | ')})` : ''}`);
   }

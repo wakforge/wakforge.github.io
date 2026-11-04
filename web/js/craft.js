@@ -2,6 +2,7 @@
 import { norm, escapeHtml, scanKey, lev } from './util.js';
 import { t, tn, isEn, locale, jobName, rarityLabel, monsterTypeName, trapActionName } from './i18n.js';
 import { parseRecapWords, matchBuild } from './buildimport.js';
+import { havresacTotals } from './havresac.js';
 import { buildIndex, computeList, costIndex, searchItems, sourcesOf, mainRecipe, missingPlans, monsterItemIds, encodeShare, decodeShare, parseOwned, RARITY_CLASS } from './craftcore.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -67,7 +68,7 @@ function toEnglish(dItem, dRes, dBest, en) {
   }
 }
 
-async function ensureData(viewId) {
+export async function ensureData(viewId) {
   const view = $(`#${viewId}`);
   const load = view.querySelector('.loading');
   const body = view.querySelector('.view-body');
@@ -104,7 +105,7 @@ export function monsterPortrait(m, { px = 80, cls = '' } = {}) {
   if (!m?.image) return `<span class="portrait ph ${cls}" aria-hidden="true">${escapeHtml((m?.nom || '?')[0])}</span>`;
   return `<span class="portrait ${cls}"><img src="${MONSTER_IMG(m.image, px)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('ph');this.remove()"></span>`;
 }
-function itemLabel(o, { link = true } = {}) {
+export function itemLabel(o, { link = true } = {}) {
   if (!o) return '<span class="muted">?</span>';
   const inner = `${itemIcon(o)}<span class="lbl">${escapeHtml(o.nom)}</span>`;
   return link ? `<button class="item-link" type="button" data-item="${o.id}">${inner}</button>` : `<span class="item-name">${inner}</span>`;
@@ -241,7 +242,8 @@ export async function renderCraft() {
   renderCraftLists();
   const c = ctx.getCraft();
   c.cibles = c.cibles.filter(x => IDX.byId.has(x.id));
-  const res = computeList(IDX, c.cibles, { stock: c.stock, buy: c.acheter });
+  let res = computeList(IDX, c.cibles, { stock: c.stock, buy: c.acheter });
+  if (applyHavresac(c, res)) res = computeList(IDX, c.cibles, { stock: c.stock, buy: c.acheter });
 
   // objectifs
   $('#craftEmpty').hidden = c.cibles.length > 0;
@@ -1215,6 +1217,26 @@ function guessVersion(versions, lines) {
 }
 
 /** Composants de la liste active (ressources et fabrications intermédiaires) : id -> { need, have }. */
+/** Havre-sac → « J'ai » : un nouveau relevé remplace les quantités des ressources de la liste ;
+ * sinon on ne complète que les ressources sans quantité (ajoutées depuis), pour garder les corrections à la main. */
+function applyHavresac(c, res) {
+  const hs = ctx.havresac?.();
+  if (!hs?.maj || !c.cibles.length) return false;
+  const tot = havresacTotals(hs);
+  const fresh = hs.maj > (c.hsMaj || 0);
+  let changed = fresh;
+  for (const x of [...res.base, ...res.crafts]) {
+    if (c.cibles.some(tg => tg.id === x.id) || tot[x.id] == null) continue;
+    if (!fresh && (c.stock[x.id] != null || !tot[x.id])) continue;
+    if (tot[x.id]) c.stock[x.id] = Math.min(999999, tot[x.id]); else delete c.stock[x.id];
+    changed = true;
+  }
+  if (!changed) return false;
+  c.hsMaj = hs.maj;
+  ctx.saveCraft();
+  return true;
+}
+
 function listComponents() {
   const c = ctx.getCraft();
   const res = computeList(IDX, c.cibles, { stock: c.stock, buy: c.acheter });

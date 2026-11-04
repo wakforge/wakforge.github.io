@@ -4,11 +4,12 @@ import {
 import { createSync } from './sync.js';
 import { t as tr, tn, isEn, lang, setLang, translateDom, jobName } from './i18n.js';
 import { initCraft, renderCraft, renderMonsters, renderPlans, gamedataInfo, monsterPortrait, overlayOpen, handleScan, decodeShare } from './craft.js';
+import { initHavresac, renderHavresac, scanCoffre } from './hsview.js';
 
 /** Portrait de l'archimonstre (wakfu.wiki.gg), ou son initiale s'il n'y en a pas. */
 const archiPortrait = (m, px, cls) => monsterPortrait({ image: m?.image, nom: m?.name }, { px, cls: `archi ${cls}` });
 
-const APP_VERSION = '2.23.0';
+const APP_VERSION = '2.24.0';
 const STORE_KEY = 'archimonstres.state.v1';
 const DEVICE_KEY = 'archimonstres.device.v1';
 const $ = (s, r = document) => r.querySelector(s);
@@ -30,7 +31,7 @@ const native = {
 /* =================================================================== état */
 
 const defaultSettings = () => ({ sound: true, volume: 0.7, soonMin: 5, notify: true });
-const defaultCraft = () => ({ cibles: [], stock: {}, acheter: {} });
+const defaultCraft = () => ({ cibles: [], stock: {}, acheter: {}, hsMaj: 0 });
 function sanitizeCraft(raw) {
   const c = defaultCraft();
   if (!raw || typeof raw !== 'object') return c;
@@ -44,6 +45,7 @@ function sanitizeCraft(raw) {
     if (+id > 0 && v > 0) c.stock[+id] = Math.min(v, 999999);
   }
   for (const [id, v] of Object.entries(raw.acheter || {})) if (+id > 0 && v) c.acheter[+id] = true;
+  c.hsMaj = Math.max(0, +raw.hsMaj || 0); // dernier relevé du havre-sac reporté dans « J'ai »
   return c;
 }
 const craftEmpty = c => !c.cibles.length && !Object.keys(c.stock).length;
@@ -66,6 +68,7 @@ function defaultState() {
     prix: {},       // id -> prix unitaire en kamas (commun à toutes les listes)
     metiers: {},    // métier -> niveau du joueur
     plans: {},      // id du plan -> true : plans déjà appris
+    havresac: { onglets: [], maj: 0 }, // onglets du coffre lus sur des captures : [{ id, nom, date, items: { id: qte } }]
     settings: defaultSettings(),
     updatedAt: 0,
   };
@@ -120,6 +123,7 @@ function sanitizeState(raw) {
     if (JOBS.includes(m) && n > 0) s.metiers[m] = Math.min(n, 300);
   }
   for (const [id, v] of Object.entries(raw.plans || {})) if (+id > 0 && v) s.plans[+id] = true;
+  s.havresac = sanitizeHavresac(raw.havresac);
   const st = raw.settings || {};
   s.settings = {
     sound: st.sound !== false,
@@ -129,6 +133,24 @@ function sanitizeState(raw) {
   };
   s.updatedAt = +raw.updatedAt || 0;
   return s;
+}
+
+const MAX_ONGLETS = 40;
+function sanitizeHavresac(raw) {
+  const hs = { onglets: [], maj: Math.max(0, +raw?.maj || 0) };
+  const seen = new Set();
+  for (const o of Array.isArray(raw?.onglets) ? raw.onglets : []) {
+    const id = String(o?.id || '').slice(0, 40);
+    if (!id || seen.has(id) || hs.onglets.length >= MAX_ONGLETS) continue;
+    seen.add(id);
+    const items = {};
+    for (const [k, v] of Object.entries(o.items || {})) {
+      const n = Math.floor(+v);
+      if (+k > 0 && n >= 0) items[+k] = Math.min(n, 9999999);
+    }
+    hs.onglets.push({ id, nom: cleanName(String(o.nom || '')).slice(0, 40) || 'Onglet', date: Math.max(0, +o.date || 0), items });
+  }
+  return hs;
 }
 
 function loadJSON(key, fallback) {
@@ -142,7 +164,7 @@ let state = sanitizeState(loadJSON(STORE_KEY, null));
 // Réglages propres à cet appareil (non synchronisés).
 const device = Object.assign({ topmost: false, scan: true, notified: {} }, loadJSON(DEVICE_KEY, {}));
 // résultat du scan d'objet (Ctrl+D dans le jeu), envoyé par l'appli PC
-window.wfScan = r => handleScan(r);
+window.wfScan = r => (r?.mode === 'coffre' ? scanCoffre(r) : handleScan(r));
 let sync = { enabled: false, user: null, schedulePush() {}, async pushNow() {} };
 
 function persist({ touch = true, push = true } = {}) {
@@ -852,6 +874,7 @@ function showView(name) {
   if (name === 'craft') renderCraft().then(() => { const i = $('#craftSearch'); if (i && !matchMedia('(max-width: 760px)').matches) i.focus(); renderGameSource(); });
   if (name === 'monsters') renderMonsters();
   if (name === 'plans') renderPlans();
+  if (name === 'havresac') renderHavresac();
   try { sessionStorage.setItem('archimonstres.view', name); } catch { /* rien */ }
   if (name === 'timers') setTimeout(() => search.focus(), 0);
 }
@@ -1346,6 +1369,8 @@ async function main() {
       renderJobSettings();
     },
     plans: () => state.plans,
+    havresac: () => state.havresac,
+    saveHavresac: () => persist(),
     setPlan: (id, v) => {
       if (v) state.plans[id] = true; else delete state.plans[id];
       persist();
@@ -1359,6 +1384,10 @@ async function main() {
     saveCraft: () => persist(),
     toast, toastUndo,
     showView,
+  });
+  initHavresac({
+    get: () => state.havresac, save: () => persist(), toast, native,
+    onChange: () => { if (!$('#view-craft').hidden || overlayOpen()) renderCraft(); },
   });
   await loadData();
   refreshCatalog();
