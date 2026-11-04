@@ -499,6 +499,7 @@ export const EN = {
   "Quantité dans « {nom} »": "Quantity in “{nom}”",
   "Coffre de havre-sac": "Haven bag chest",
   "Ranger dans": "Store in",
+  "Confirmer": "Confirm",
   "Remplacer le contenu de cet onglet": "Replace this tab's content",
   "Onglet « {nom} » remplacé.": "Tab “{nom}” replaced.",
   "Nouvel onglet créé.": "New tab created.",
