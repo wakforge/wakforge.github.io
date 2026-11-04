@@ -46,8 +46,10 @@ test('coffre : second onglet (capture différente des modèles de chiffres)', ()
     [768, 115, 42, 165, 11, 8, 356, 23, 0],
     [3414, 145, 116, 637, 10, 2, 361, 26, 10],
   ]);
-  // toutes les cases non vides sont reconnues ; seules des cases à 0 (icône grisée) peuvent rester inconnues
-  assert.ok(cells.filter(c => !c.id).every(c => c.qty === 0));
+  // toutes les cases sont reconnues, y compris celles à 0 (icône grisée)
+  assert.ok(cells.every(c => c.id));
+  const name = (r, c) => byId.get(cells.find(x => x.row === r && x.col === c).id)?.nom;
+  assert.deepEqual([name(1, 6), name(6, 8), name(8, 8)], ['Bec de Truche', 'Prisme Ectoplasme', 'Violine']);
   const names = cells.filter(c => c.row === 0).map(c => byId.get(c.id)?.nom);
   assert.deepEqual(names, ['Peau de Bouftou', 'Corne de Bouftou', 'Laine Royale', 'Chair de Mort-brûlé', 'Crâne de Mort-brûlé',
     'Ossements d\'Hark Saniss', 'Bec de Corbac', 'Serre de Corbac', 'Etoile Bleue']);
@@ -55,12 +57,15 @@ test('coffre : second onglet (capture différente des modèles de chiffres)', ()
 
 test('coffre : icônes reconnues et rareté du cadre (même icône, deux raretés)', () => {
   const { cells } = readCoffre(shot('coffre-81-156.png'), icons, res);
-  assert.ok(cells.filter(c => !c.id).every(c => c.qty === 0));
+  assert.ok(cells.every(c => c.id));
   const at = (r, c) => byId.get(cells.find(x => x.row === r && x.col === c).id);
   assert.equal(at(0, 0).nom, 'Terre de Slek');
   assert.equal(at(0, 4).nom, 'Cuir Taroudé');
   assert.equal(at(4, 0).nom, 'Cuir de Glagla');
   assert.equal(at(0, 2).rarete, 3); // cadre orange : mythique
+  // cases à 0 (icône grisée)
+  assert.equal(at(8, 6).nom, 'Fouwwuwe Infectée');
+  assert.equal(at(5, 0).nom, 'Poils-plume des Neiges');
   const t = totals(cells);
   assert.equal(t[cells[0].id], 575);
 });
