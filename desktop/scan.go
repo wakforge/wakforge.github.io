@@ -49,7 +49,8 @@ var (
 	procCreateCompatibleBitmap = gdi32.NewProc("CreateCompatibleBitmap")
 	procSelectObject           = gdi32.NewProc("SelectObject")
 	procBitBlt                 = gdi32.NewProc("BitBlt")
-	procGetDIBits              = gdi32.NewProc("GetDIBits")
+	procCreateDIBSection       = gdi32.NewProc("CreateDIBSection")
+	procGdiFlush               = gdi32.NewProc("GdiFlush")
 	procDeleteObject           = gdi32.NewProc("DeleteObject")
 	procDeleteDC               = gdi32.NewProc("DeleteDC")
 )
@@ -284,14 +285,23 @@ func captureGameWindow() (*image.RGBA, error) {
 		return nil, errors.New("fenêtre du jeu introuvable")
 	}
 	r := windowRect(uintptr(h))
-	w, ht := int(r.R-r.L), int(r.B-r.T)
+	// fenêtre agrandie ou plein écran : ses bords débordent de l'écran, on garde la partie visible
+	vx, _, _ := procGetSystemMetrics.Call(smXVirtual)
+	vy, _, _ := procGetSystemMetrics.Call(smYVirtual)
+	vw, _, _ := procGetSystemMetrics.Call(smCXVirtual)
+	vh, _, _ := procGetSystemMetrics.Call(smCYVirtual)
+	minX, minY := int(int32(vx)), int(int32(vy))
+	maxX, maxY := minX+int(int32(vw)), minY+int(int32(vh))
+	l, t := clamp(int(r.L), minX, maxX), clamp(int(r.T), minY, maxY)
+	rr, b := clamp(int(r.R), minX, maxX), clamp(int(r.B), minY, maxY)
+	w, ht := rr-l, b-t
 	if w < 200 || ht < 200 {
 		return nil, errors.New("fenêtre du jeu trop petite")
 	}
 	var err error
 	for try := 0; try < 3; try++ {
 		var img *image.RGBA
-		if img, err = captureScreen(int(r.L), int(r.T), w, ht); err == nil {
+		if img, err = captureScreen(l, t, w, ht); err == nil {
 			return img, nil
 		}
 		time.Sleep(40 * time.Millisecond)
@@ -396,30 +406,39 @@ func captureScreen(x, y, w, h int) (*image.RGBA, error) {
 	}
 	defer procReleaseDC.Call(0, screen)
 	mem, _, _ := procCreateCompatibleDC.Call(screen)
+	if mem == 0 {
+		return nil, errors.New("écran inaccessible (CreateCompatibleDC)")
+	}
 	defer procDeleteDC.Call(mem)
-	bmp, _, _ := procCreateCompatibleBitmap.Call(screen, uintptr(w), uintptr(h))
-	if bmp == 0 {
-		return nil, errors.New("mémoire insuffisante (CreateCompatibleBitmap)")
+
+	// image 32 bits en mémoire lisible directement (pas de GetDIBits, qui échoue sur certaines cartes graphiques)
+	hdr := struct {
+		H     bitmapInfoHeader
+		Color [4]byte
+	}{H: bitmapInfoHeader{Width: int32(w), Height: -int32(h), Planes: 1, BitCount: 32}}
+	hdr.H.Size = uint32(unsafe.Sizeof(hdr.H))
+	var bits *byte
+	bmp, _, _ := procCreateDIBSection.Call(mem, uintptr(unsafe.Pointer(&hdr)), dibRGBColors, uintptr(unsafe.Pointer(&bits)), 0, 0)
+	if bmp == 0 || bits == nil {
+		return nil, errors.New("mémoire insuffisante (CreateDIBSection)")
 	}
 	defer procDeleteObject.Call(bmp)
 	old, _, _ := procSelectObject.Call(mem, bmp)
 	ok, _, _ := procBitBlt.Call(mem, 0, 0, uintptr(w), uintptr(h), screen, uintptr(x), uintptr(y), srcCopy|captureBlt)
-	procSelectObject.Call(mem, old)
+	if ok == 0 { // certains pilotes refusent CAPTUREBLT
+		ok, _, _ = procBitBlt.Call(mem, 0, 0, uintptr(w), uintptr(h), screen, uintptr(x), uintptr(y), srcCopy)
+	}
+	procGdiFlush.Call()
 	if ok == 0 {
+		procSelectObject.Call(mem, old)
 		return nil, errors.New("copie de l'écran refusée (BitBlt)")
 	}
-
-	hdr := bitmapInfoHeader{Width: int32(w), Height: -int32(h), Planes: 1, BitCount: 32}
-	hdr.Size = uint32(unsafe.Sizeof(hdr))
-	buf := make([]byte, w*h*4)
-	r, _, _ := procGetDIBits.Call(mem, bmp, 0, uintptr(h), uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&hdr)), dibRGBColors)
-	if r == 0 {
-		return nil, errors.New("lecture de l'image refusée (GetDIBits)")
-	}
+	buf := unsafe.Slice(bits, w*h*4)
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	for i := 0; i < len(buf); i += 4 { // BGRA -> RGBA
 		img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = buf[i+2], buf[i+1], buf[i], 255
 	}
+	procSelectObject.Call(mem, old)
 	return img, nil
 }
 
