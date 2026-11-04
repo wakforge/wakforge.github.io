@@ -110,6 +110,10 @@ func newScanWindow(main webview2.WebView, mainWnd uintptr) *scanWindow {
 	_ = view.Bind("nativeScanSetHave", func(id, qte int) {
 		main.Dispatch(func() { main.Eval(fmt.Sprintf("window.wfScanSetHave && window.wfScanSetHave(%d, %d)", id, qte)) })
 	})
+	_ = view.Bind("nativeScanCoffre", func(choice string) {
+		b, _ := json.Marshal(choice)
+		main.Dispatch(func() { main.Eval("window.wfScanCoffre && window.wfScanCoffre(" + string(b) + ")") })
+	})
 	_ = view.Bind("nativeScanClose", func() {
 		main.Dispatch(func() { s.close(true) })
 	})
