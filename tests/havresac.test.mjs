@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { decodePNG } from '../scripts/lib/png.mjs';
-import { findGrid, readCoffre, parseIcons, encodeIcons, totals, ICON_N } from '../web/js/havresac.js';
+import { findGrid, readCoffre, parseIcons, encodeIcons, totals, ICON_N, cellsToCases, ongletItems, havresacTotals } from '../web/js/havresac.js';
 
 const icons = parseIcons(readFileSync(new URL('../web/data/icones_ressources.bin', import.meta.url)));
 const res = JSON.parse(readFileSync(new URL('../web/data/data_ressource.json', import.meta.url))).ressources;
@@ -71,6 +71,20 @@ test('coffre : mêmes totaux que le jeu (« Nombre d\'objets uniques » et « No
     assert.equal(cells.length, uniques, f);
     assert.equal(cells.reduce((s, c) => s + c.qty, 0), total, f);
   }
+});
+
+test('onglet : cases à la même place que dans le jeu, total de plusieurs onglets', () => {
+  const { cells } = readCoffre(shot('coffre-12-81.png'), icons, res);
+  const cases = cellsToCases(cells);
+  assert.equal(cases.length, 100);
+  assert.equal(cases[9], null);            // 10e colonne vide dans le jeu
+  const r1 = cells.find(c => c.row === 1 && c.col === 0);  // 2e ligne : case 10, pas 9
+  assert.deepEqual(cases[10], [r1.id, 3112]);
+  assert.deepEqual(cases[0], [cells[0].id, 3470]);
+  const items = ongletItems({ cases });
+  assert.equal(Object.values(items).reduce((a, b) => a + b, 0), 41586);
+  const tot = havresacTotals({ onglets: [{ cases }, { cases: [[cells[0].id, 30], null] }] });
+  assert.equal(tot[cells[0].id], 3500);
 });
 
 test('icônes : encodage puis lecture du fichier', () => {

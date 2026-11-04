@@ -9,7 +9,7 @@ import { initHavresac, renderHavresac, scanCoffre } from './hsview.js';
 /** Portrait de l'archimonstre (wakfu.wiki.gg), ou son initiale s'il n'y en a pas. */
 const archiPortrait = (m, px, cls) => monsterPortrait({ image: m?.image, nom: m?.name }, { px, cls: `archi ${cls}` });
 
-const APP_VERSION = '2.24.0';
+const APP_VERSION = '2.25.0';
 const STORE_KEY = 'archimonstres.state.v1';
 const DEVICE_KEY = 'archimonstres.device.v1';
 const $ = (s, r = document) => r.querySelector(s);
@@ -68,7 +68,7 @@ function defaultState() {
     prix: {},       // id -> prix unitaire en kamas (commun à toutes les listes)
     metiers: {},    // métier -> niveau du joueur
     plans: {},      // id du plan -> true : plans déjà appris
-    havresac: { onglets: [], maj: 0 }, // onglets du coffre lus sur des captures : [{ id, nom, date, items: { id: qte } }]
+    havresac: { onglets: [], maj: 0 }, // onglets du coffre : [{ id, nom, date, cases: 100 × (null | [id, qte]) }]
     settings: defaultSettings(),
     updatedAt: 0,
   };
@@ -143,12 +143,21 @@ function sanitizeHavresac(raw) {
     const id = String(o?.id || '').slice(0, 40);
     if (!id || seen.has(id) || hs.onglets.length >= MAX_ONGLETS) continue;
     seen.add(id);
-    const items = {};
-    for (const [k, v] of Object.entries(o.items || {})) {
-      const n = Math.floor(+v);
-      if (+k > 0 && n >= 0) items[+k] = Math.min(n, 9999999);
+    // cases du coffre (10 × 10) : null ou [id, quantité] ; anciennes versions : items { id: quantité } rangés à la suite
+    const cases = Array(100).fill(null);
+    if (Array.isArray(o.cases)) {
+      o.cases.slice(0, 100).forEach((c, i) => {
+        const cid = Math.floor(+c?.[0]), n = Math.floor(+c?.[1]);
+        if (Array.isArray(c) && cid >= 0 && n >= 0) cases[i] = [cid, Math.min(n, 9999999)];
+      });
+    } else {
+      let i = 0;
+      for (const [k, v] of Object.entries(o.items || {})) {
+        const n = Math.floor(+v);
+        if (+k > 0 && n >= 0 && i < 100) cases[i++] = [+k, Math.min(n, 9999999)];
+      }
     }
-    hs.onglets.push({ id, nom: cleanName(String(o.nom || '')).slice(0, 40) || 'Onglet', date: Math.max(0, +o.date || 0), items });
+    hs.onglets.push({ id, nom: cleanName(String(o.nom || '')).slice(0, 40) || 'Onglet', date: Math.max(0, +o.date || 0), cases });
   }
   return hs;
 }

@@ -286,9 +286,28 @@ export function totals(cells) {
   return t;
 }
 
+export const SLOTS = 100; // cases d'un onglet du coffre (10 × 10)
+
+/** Cases d'un onglet lu : position dans la grille -> [id, quantité] (id 0 = case non reconnue). */
+export function cellsToCases(cells, cols = 10) {
+  const cases = Array(SLOTS).fill(null);
+  for (const c of cells) {
+    const i = c.row * cols + c.col;
+    if (i < SLOTS) cases[i] = [c.id || 0, c.qty];
+  }
+  return cases;
+}
+
+/** Ressources d'un onglet : id -> quantité. */
+export function ongletItems(o) {
+  const t = {};
+  for (const c of o?.cases || []) if (c && c[0]) t[c[0]] = (t[c[0]] || 0) + c[1];
+  return t;
+}
+
 /** Total du havre-sac (tous les onglets enregistrés) : id -> quantité. */
 export function havresacTotals(hs) {
   const t = {};
-  for (const o of hs?.onglets || []) for (const [id, n] of Object.entries(o.items)) t[id] = (t[id] || 0) + n;
+  for (const o of hs?.onglets || []) for (const [id, n] of Object.entries(ongletItems(o))) t[id] = (t[id] || 0) + n;
   return t;
 }
