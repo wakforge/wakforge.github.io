@@ -9,7 +9,7 @@ import { initHavresac, renderHavresac, scanCoffre } from './hsview.js';
 /** Portrait de l'archimonstre (wakfu.wiki.gg), ou son initiale s'il n'y en a pas. */
 const archiPortrait = (m, px, cls) => monsterPortrait({ image: m?.image, nom: m?.name }, { px, cls: `archi ${cls}` });
 
-const APP_VERSION = '2.25.1';
+const APP_VERSION = '2.25.2';
 const STORE_KEY = 'archimonstres.state.v1';
 const DEVICE_KEY = 'archimonstres.device.v1';
 const $ = (s, r = document) => r.querySelector(s);
@@ -1286,8 +1286,10 @@ function isNewer(a, b) {
 let update = null; // { tag, url, page }
 let updateHidden = false; // « Plus tard » : plus de bandeau jusqu'au prochain lancement
 
+let updateCheckedAt = 0;
 async function checkUpdate() {
   if (!native.on || updateHidden || update?.busy) return;
+  updateCheckedAt = Date.now();
   let current = APP_VERSION;
   try { const v = await window.nativeVersion?.(); if (/^v?\d+\.\d+/.test(v || '')) current = v; } catch { /* rien */ }
   let rel;
@@ -1418,7 +1420,11 @@ async function main() {
     native.scanEnable(device.scan);
     scheduleNative();
     setTimeout(checkUpdate, 4000);
-    setInterval(checkUpdate, 6 * 3600 * 1000);
+    // appli laissée ouverte : nouvelle vérification toutes les 20 min, et au retour sur la fenêtre (au plus toutes les 5 min)
+    setInterval(checkUpdate, 20 * 60 * 1000);
+    const recheck = () => { if (!document.hidden && Date.now() - updateCheckedAt > 5 * 60 * 1000) checkUpdate(); };
+    document.addEventListener('visibilitychange', recheck);
+    window.addEventListener('focus', recheck);
   }
 
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === '127.0.0.1' || location.hostname === 'localhost')) {
